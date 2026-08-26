@@ -92,7 +92,7 @@ def run() -> None:
         trend_text = summarize_trends(session, passed_rows, run_date)
 
         ranked = rank_and_cutoff(session, analyzed_rows, run_date)
-        deliver(session, run_date, trend_text, ranked)
+        deliver(session, run_date, trend_text, ranked, all_items=content_rows)
 
         if failures:
             status = "partial_failure"

@@ -1,5 +1,6 @@
 import logging
 import smtplib
+from collections import defaultdict
 from datetime import date, datetime
 from email.message import EmailMessage
 from pathlib import Path
@@ -7,6 +8,7 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from app.db import repository
+from app.db.models import Content as ContentRow
 from app.db.models import Digest
 from app.pipeline.rank import RankedItem
 
@@ -14,7 +16,32 @@ logger = logging.getLogger(__name__)
 _OUTPUT_DIR = Path(__file__).resolve().parents[3] / "output"
 
 
-def render_digest_text(run_date: date, trend_summary: str, items: list[RankedItem]) -> str:
+def _render_full_list(all_items: list[ContentRow], selected_ids: set) -> str:
+    """MUST READ와 별도로, 오늘 수집된 전체를 소스별로 훑어볼 수 있게 하는 섹션.
+    LLM 분석 없이 이미 수집된 데이터만 쓰므로 추가 비용이 들지 않는다 —
+    '관심사에 맞는 것만 압축'과 '오늘 뭐가 올라왔는지 폭넓게 보기'는 서로 다른
+    목적이라 랭킹 하나로는 둘 다 만족시킬 수 없다는 판단(2026-08-27)."""
+    by_source: dict[str, list[ContentRow]] = defaultdict(list)
+    for row in all_items:
+        by_source[row.source].append(row)
+
+    lines = [f"=== 오늘 수집된 전체 목록 ({len(all_items)}건) ==="]
+    for source in sorted(by_source.keys()):
+        rows = sorted(by_source[source], key=lambda r: (r.scores or {}).get("relevance", 0), reverse=True)
+        lines.append(f"\n[{source}] ({len(rows)}건)")
+        for r in rows:
+            marker = " ★MUST READ" if r.id in selected_ids else ""
+            lines.append(f"- {r.title}{marker}")
+            lines.append(f"  {r.url}")
+    return "\n".join(lines)
+
+
+def render_digest_text(
+    run_date: date,
+    trend_summary: str,
+    items: list[RankedItem],
+    all_items: list[ContentRow] | None = None,
+) -> str:
     lines = [f"=== 오늘의 Tech Radar ({run_date.isoformat()}) ===\n"]
     for rank, (row, rrf_score, is_diversity) in enumerate(items, start=1):
         analysis = row.llm_analysis or {}
@@ -28,6 +55,10 @@ def render_digest_text(run_date: date, trend_summary: str, items: list[RankedIte
     if trend_summary:
         lines.append("=== 오늘의 주요 흐름 ===")
         lines.append(trend_summary)
+    if all_items:
+        selected_ids = {row.id for row, _, _ in items}
+        lines.append("")
+        lines.append(_render_full_list(all_items, selected_ids))
     return "\n".join(lines)
 
 
@@ -84,10 +115,11 @@ def deliver(
     run_date: date,
     trend_summary: str,
     items: list[RankedItem],
+    all_items: list[ContentRow] | None = None,
     sender: NotificationSender | None = None,
 ) -> Digest:
     sender = sender or _default_sender()
-    text = render_digest_text(run_date, trend_summary, items)
+    text = render_digest_text(run_date, trend_summary, items, all_items)
 
     out_path = _save_to_file(run_date, text)
     logger.info("digest saved to %s", out_path)

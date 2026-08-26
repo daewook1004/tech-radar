@@ -2,6 +2,8 @@ import logging
 import sys
 from datetime import date
 
+import openai
+
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
@@ -86,6 +88,12 @@ def run() -> None:
         status = "partial_failure"
     except llm_client.BudgetExceededError as e:
         logger.warning("예산 초과로 파이프라인 중단: %s", e)
+        failures.append({"stage": "llm", "source": None, "error": str(e)})
+        status = "partial_failure"
+    except openai.OpenAIError as e:
+        # 인증 실패/rate limit/타임아웃 등 OpenAI API 호출 자체가 실패한 경우 —
+        # PRD §9: 조용히 죽지 않고 실패로 기록한 뒤 그때까지의 결과(있다면)로 계속.
+        logger.exception("OpenAI API 호출 실패")
         failures.append({"stage": "llm", "source": None, "error": str(e)})
         status = "partial_failure"
 

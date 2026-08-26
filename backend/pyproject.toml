@@ -13,6 +13,7 @@ dependencies = [
     "python-dotenv",
     "pyyaml",
     "feedparser",
+    "requests",
     "openai",
     "fastembed",
     "numpy",

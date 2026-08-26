@@ -8,8 +8,12 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
 
+from app.collectors.arxiv import ArxivCollector
 from app.collectors.geeknews import GeekNewsCollector
-from app.config import get_sources_config
+from app.collectors.github import GitHubCollector
+from app.collectors.hackernews import HackerNewsCollector
+from app.collectors.rss import RSSCollector
+from app.config import get_settings, get_sources_config
 from app.db import repository
 from app.db.session import get_session
 from app.llm import client as llm_client
@@ -25,10 +29,20 @@ from app.pipeline.trend_summary import summarize_trends
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("run_pipeline")
 
-# 이번 세션(Walking Skeleton)은 GeekNews만. 다음 세션에서 hackernews/github/arxiv/rss 추가 —
 # 새 소스는 이 dict에 팩토리 함수 하나만 추가하면 되고, 아래 파이프라인 로직은 안 바뀐다.
+# 소스 하나가 통째로 실패해도(collect()가 예외를 던지면) 다른 소스는 계속 진행된다(§run() 참조).
 COLLECTOR_FACTORIES = {
     "geeknews": lambda cfg: GeekNewsCollector(rss_url=cfg["geeknews"]["rss_url"]),
+    "hackernews": lambda cfg: HackerNewsCollector(min_points=cfg["hackernews"]["min_points"]),
+    "github": lambda cfg: GitHubCollector(
+        watch_repos=cfg["github"]["watch_repos"],
+        trending_keywords=cfg["github"]["trending_approx"]["keywords"],
+        created_within_days=cfg["github"]["trending_approx"]["created_within_days"],
+        min_stars=cfg["github"]["trending_approx"]["min_stars"],
+        github_token=get_settings().github_token,
+    ),
+    "arxiv": lambda cfg: ArxivCollector(categories=cfg["arxiv"]["categories"], keywords=cfg["arxiv"]["keywords"]),
+    "rss": lambda cfg: RSSCollector(feeds=cfg["rss_blogs"]),
 }
 
 # LLM 정밀분석(2차) 대상으로 넘길 상위 후보 수 — 1차 스코어링을 통과한 것 중 이만큼만 Sonnet 호출

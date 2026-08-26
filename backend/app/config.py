@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://techradar:techradar@localhost:5432/techradar"
     basic_auth_user: str | None = None
     basic_auth_password: str | None = None
+    # 선택: 없어도 동작(비인증 60req/h, Search 10req/min)하지만 있으면 레이트리밋이 크게 완화됨
+    github_token: str | None = None
 
 
 @lru_cache

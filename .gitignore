@@ -16,6 +16,9 @@ node_modules/
 # DB / misc
 *.log
 
+# 파이프라인이 실행마다 로컬에 저장하는 digest 텍스트 (생성물, 소스 아님)
+/output/
+
 # OS
 .DS_Store
 Thumbs.db
@@ -24,5 +27,5 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Claude Code local session settings (machine-specific permission allowlist)
-.claude/settings.local.json
+# Claude Code local session/runtime state (permissions, session locks — machine-specific)
+.claude/

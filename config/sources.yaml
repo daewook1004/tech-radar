@@ -1,6 +1,3 @@
-# 이번 세션(Walking Skeleton)은 geeknews 섹션만 실제로 Collector에 연결됨.
-# 나머지는 다음 세션에서 HackerNewsCollector / GitHubCollector / ArxivCollector / RSSCollector가 참조할 설정.
-
 geeknews:
   rss_url: "https://feeds.feedburner.com/geeknews-feed"   # 검증 완료 (2026-08-26)
 
@@ -26,17 +23,15 @@ arxiv:
   categories: ["cs.CL", "cs.LG", "cs.AI", "cs.MA"]
   keywords: ["retrieval augmented generation", "agent", "fine-tuning", "evaluation"]
 
+# Anthropic/Meta AI는 공식 RSS가 없어 목록에서 제외(2026-08-26). Anthropic 소식은
+# github.com/anthropics/anthropic-sdk-python(Watch) + GeekNews/HN에서 어느 정도 커버됨.
 rss_blogs:
   - name: "OpenAI"
-    url: "https://openai.com/blog/rss.xml"
-  - name: "Anthropic"
-    url: "https://www.anthropic.com/rss.xml"
+    url: "https://openai.com/blog/rss.xml"                 # 최근 7일 lookback 필터 적용됨(전체 아카이브 반환 이슈)
   - name: "Google AI"
     url: "https://blog.google/technology/ai/rss/"
-  - name: "Meta AI"
-    url: "https://ai.meta.com/blog/rss/"
   - name: "Hugging Face"
-    url: "https://huggingface.co/blog/feed.xml"
+    url: "https://huggingface.co/blog/feed.xml"             # 최근 7일 lookback 필터 적용됨(전체 아카이브 반환 이슈)
   - name: "PyTorch Korea"
     url: "https://pytorch.kr/feed.xml"                     # 검증 완료 (2026-08-26)
   - name: "TechBlogPosts (국내 기업 기술 블로그 애그리게이터)"

@@ -1,0 +1,43 @@
+# 이번 세션(Walking Skeleton)은 geeknews 섹션만 실제로 Collector에 연결됨.
+# 나머지는 다음 세션에서 HackerNewsCollector / GitHubCollector / ArxivCollector / RSSCollector가 참조할 설정.
+
+geeknews:
+  rss_url: "https://feeds.feedburner.com/geeknews-feed"   # 검증 완료 (2026-08-26)
+
+hackernews:
+  min_points: 50
+
+github:
+  watch_repos:
+    - pytorch/pytorch
+    - huggingface/transformers
+    - langchain-ai/langchain
+    - run-llama/llama_index
+    - vllm-project/vllm
+    - ollama/ollama
+    - openai/openai-python
+    - anthropics/anthropic-sdk-python
+  trending_approx:
+    keywords: ["LLM", "agent", "RAG", "inference", "fine-tuning"]
+    created_within_days: 14
+    min_stars: 50
+
+arxiv:
+  categories: ["cs.CL", "cs.LG", "cs.AI", "cs.MA"]
+  keywords: ["retrieval augmented generation", "agent", "fine-tuning", "evaluation"]
+
+rss_blogs:
+  - name: "OpenAI"
+    url: "https://openai.com/blog/rss.xml"
+  - name: "Anthropic"
+    url: "https://www.anthropic.com/rss.xml"
+  - name: "Google AI"
+    url: "https://blog.google/technology/ai/rss/"
+  - name: "Meta AI"
+    url: "https://ai.meta.com/blog/rss/"
+  - name: "Hugging Face"
+    url: "https://huggingface.co/blog/feed.xml"
+  - name: "PyTorch Korea"
+    url: "https://pytorch.kr/feed.xml"                     # 검증 완료 (2026-08-26)
+  - name: "TechBlogPosts (국내 기업 기술 블로그 애그리게이터)"
+    url: "https://www.techblogposts.com/rss.xml"            # 검증 완료 (2026-08-26)

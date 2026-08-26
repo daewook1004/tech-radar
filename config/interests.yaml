@@ -1,0 +1,31 @@
+high:
+  - name: "LLM Engineering"
+    description: "LLM 애플리케이션 설계, 프롬프트 엔지니어링, LLM 기반 시스템 구축"
+  - name: "RAG"
+    description: "검색 증강 생성, 리트리버/인덱싱 전략, RAG 평가"
+  - name: "Agent"
+    description: "AI 에이전트 아키텍처, 툴 사용, 멀티에이전트, 에이전트 메모리"
+  - name: "AI Coding"
+    description: "AI 코딩 어시스턴트, 코드 생성/리뷰 자동화"
+  - name: "LLM Evaluation"
+    description: "LLM 평가 방법론, 벤치마크, 품질 측정"
+  - name: "Inference"
+    description: "LLM 추론 최적화, 서빙, 배포"
+  - name: "Healthcare AI"
+    description: "의료 분야 AI 응용"
+
+medium:
+  - name: "AI Product"
+    description: "AI 제품 기획/전략"
+  - name: "AI UX"
+    description: "AI 제품의 사용자 경험 설계"
+  - name: "Data Engineering"
+    description: "데이터 파이프라인, ETL, 데이터 인프라"
+  - name: "AI Infrastructure"
+    description: "AI 학습/서빙 인프라, MLOps"
+
+low:
+  - name: "일반 스타트업 뉴스"
+    description: "AI와 직접 관련 없는 일반 스타트업/비즈니스 뉴스"
+  - name: "AI 홍보성 뉴스"
+    description: "기술적 깊이가 낮은 AI 마케팅/홍보성 콘텐츠"

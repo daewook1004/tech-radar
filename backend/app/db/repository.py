@@ -1,0 +1,112 @@
+from datetime import date, datetime, timedelta
+
+from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.orm import Session
+
+from app.db.models import Content as ContentRow
+from app.db.models import Digest, DigestItem, PipelineRun
+from app.schemas.content import Content as ContentSchema
+
+
+def upsert_content_batch(session: Session, items: list[ContentSchema]) -> list[ContentRow]:
+    """중복(content_hash)은 DB 레벨에서도 안전망으로 무시하고, 최종적으로
+    이번 배치에 해당하는 모든 행(신규 삽입 + 기존 존재분)을 DB 상태 그대로 반환한다."""
+    if not items:
+        return []
+
+    rows = [
+        dict(
+            id=item.id,
+            source=item.source,
+            source_type=item.source_type,
+            author=item.author,
+            title=item.title,
+            text=item.text,
+            url=item.url,
+            published_at=item.published_at,
+            collected_at=item.collected_at,
+            tags=item.tags,
+            raw_data=item.raw_data,
+            content_hash=item.content_hash,
+            engagement_metrics=item.engagement_metrics,
+            language=item.language,
+            status=item.status,
+        )
+        for item in items
+    ]
+    stmt = pg_insert(ContentRow).values(rows).on_conflict_do_nothing(index_elements=["content_hash"])
+    session.execute(stmt)
+    session.commit()
+
+    hashes = [item.content_hash for item in items]
+    result = session.execute(select(ContentRow).where(ContentRow.content_hash.in_(hashes)))
+    return list(result.scalars().all())
+
+
+def start_pipeline_run(session: Session, run_date: date) -> PipelineRun:
+    """같은 날 재실행(개발 중 반복 실행 포함)해도 안전하게 상태를 리셋."""
+    existing = session.scalar(select(PipelineRun).where(PipelineRun.run_date == run_date))
+    if existing:
+        existing.started_at = datetime.utcnow()
+        existing.finished_at = None
+        existing.status = "running"
+        existing.failures = []
+        existing.stats = {}
+        session.commit()
+        return existing
+
+    run = PipelineRun(
+        run_date=run_date, started_at=datetime.utcnow(), status="running", failures=[], stats={}
+    )
+    session.add(run)
+    session.commit()
+    return run
+
+
+def finish_pipeline_run(session: Session, run: PipelineRun, status: str, stats: dict) -> None:
+    run.finished_at = datetime.utcnow()
+    run.status = status
+    run.stats = stats
+    session.commit()
+
+
+def get_recent_digest_content_ids(session: Session, days: int = 1) -> set:
+    """최근 N일 digest에 이미 포함됐던 content_id 집합 — freshness(어제 노출 제외) 판단용."""
+    cutoff = date.today() - timedelta(days=days)
+    stmt = (
+        select(DigestItem.content_id)
+        .join(Digest, Digest.id == DigestItem.digest_id)
+        .where(Digest.run_date >= cutoff)
+    )
+    return set(session.scalars(stmt).all())
+
+
+def save_digest(
+    session: Session,
+    run_date: date,
+    trend_summary: str,
+    items: list[tuple[ContentRow, float, bool]],
+) -> Digest:
+    digest = session.scalar(select(Digest).where(Digest.run_date == run_date))
+    if digest:
+        session.execute(delete(DigestItem).where(DigestItem.digest_id == digest.id))
+        digest.generated_at = datetime.utcnow()
+        digest.trend_summary = trend_summary
+    else:
+        digest = Digest(run_date=run_date, generated_at=datetime.utcnow(), trend_summary=trend_summary)
+        session.add(digest)
+        session.flush()  # digest.id 확보
+
+    for rank, (row, score, is_diversity) in enumerate(items, start=1):
+        session.add(
+            DigestItem(
+                digest_id=digest.id,
+                content_id=row.id,
+                rank=rank,
+                final_score=score,
+                is_diversity_pick=is_diversity,
+            )
+        )
+    session.commit()
+    return digest

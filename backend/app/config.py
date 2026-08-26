@@ -30,6 +30,11 @@ class Settings(BaseSettings):
     # 선택: 없어도 동작(비인증 60req/h, Search 10req/min)하지만 있으면 레이트리밋이 크게 완화됨
     github_token: str | None = None
 
+    # 이메일 발송 (Gmail SMTP + 앱 비밀번호). 셋 다 없으면 콘솔 출력으로 폴백.
+    gmail_address: str | None = None
+    gmail_app_password: str | None = None
+    email_to: str | None = None
+
 
 @lru_cache
 def get_settings() -> Settings:

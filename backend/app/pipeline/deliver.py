@@ -16,10 +16,12 @@ _OUTPUT_DIR = Path(__file__).resolve().parents[3] / "output"
 
 def render_digest_text(run_date: date, trend_summary: str, items: list[RankedItem]) -> str:
     lines = [f"=== 오늘의 Tech Radar ({run_date.isoformat()}) ===\n"]
-    for rank, (row, score, is_diversity) in enumerate(items, start=1):
+    for rank, (row, rrf_score, is_diversity) in enumerate(items, start=1):
         analysis = row.llm_analysis or {}
         tag = " [다양성 보장]" if is_diversity else ""
-        lines.append(f"{rank}. {row.title} — Score: {score:.1f}{tag}")
+        # RRF 원점수(예: 0.0492)는 그대로 보여주면 사람이 체감하기 어려워
+        # ×1000만 해서 표시용으로만 스케일업(랭킹 로직에는 영향 없음).
+        lines.append(f"{rank}. {row.title} — RRF Score: {rrf_score * 1000:.1f}{tag}")
         lines.append(f"   {analysis.get('summary', '(분석 없음)')}")
         lines.append(f"   왜 중요한가: {analysis.get('why_important', '-')}")
         lines.append(f"   URL: {row.url}\n")

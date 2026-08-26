@@ -1,3 +1,4 @@
+import uuid
 from datetime import date
 
 from sqlalchemy.orm import Session
@@ -6,32 +7,52 @@ from app.config import get_interests, get_pipeline_settings
 from app.db import repository
 from app.db.models import Content as ContentRow
 
-RankedItem = tuple[ContentRow, float, bool]  # (row, final_score, is_diversity_pick)
+RankedItem = tuple[ContentRow, float, bool]  # (row, rrf_score, is_diversity_pick)
+
+# 표준값(Elasticsearch/OpenSearch/Azure AI Search 등 하이브리드 서치의 RRF 기본값).
+# 하위권 문서가 최종 순위에 미치는 영향을 완만하게 눌러주는 역할.
+_RRF_K = 60
+
+# relevance(임베딩, 0~1)와 importance/novelty/credibility(LLM 채점, 1~10)는 스케일이
+# 전혀 달라서 예전처럼 원점수에 손으로 정한 가중치(40/3/2/1)를 곱해 더하면 스케일이
+# 큰 신호가 은근슬쩍 유리해진다. RRF는 원점수 대신 "신호별 순위"만 쓰기 때문에
+# 이 문제가 애초에 발생하지 않는다 — Elastic/OpenSearch 등이 벡터검색+키워드검색을
+# 합칠 때 쓰는 표준 기법을 그대로 가져옴.
+#
+# 단, 동일 가중치로 4개 신호를 그냥 더하면 relevance가 "4표 중 1표"로만 취급돼서
+# (예: 관심사와 거의 무관해도 importance가 최상위권이면 그 한 표로 순위가 크게 오름)
+# 오히려 예전보다 관심사 매칭이 흐려지는 걸 실측으로 확인함(2026-08-26). relevance에
+# 3배 가중치를 줘서 "관련 없으면 아무리 중요해도 밀린다"가 실제로 작동하게 함.
+_SIGNAL_WEIGHTS = {"relevance": 3, "importance": 1, "novelty": 1, "credibility": 1}
 
 
-def _final_score(row: ContentRow) -> float:
-    scores = row.scores or {}
-    # relevance(0~1)*40 + importance/novelty/credibility(각 1~10) 가중합 → 0~100 스케일
-    return (
-        scores.get("relevance", 0) * 40
-        + scores.get("importance", 0) * 3
-        + scores.get("novelty", 0) * 2
-        + scores.get("credibility", 0) * 1
-    )
+def _rank_within(rows: list[ContentRow], key: str) -> dict[uuid.UUID, int]:
+    """rows를 key 점수 내림차순으로 정렬해 1등부터 순위를 매긴다."""
+    ordered = sorted(rows, key=lambda r: (r.scores or {}).get(key, 0), reverse=True)
+    return {row.id: i + 1 for i, row in enumerate(ordered)}
+
+
+def _rrf_scores(rows: list[ContentRow]) -> dict[uuid.UUID, float]:
+    rank_maps = {key: _rank_within(rows, key) for key in _SIGNAL_WEIGHTS}
+    return {
+        row.id: sum(weight / (_RRF_K + rank_maps[key][row.id]) for key, weight in _SIGNAL_WEIGHTS.items())
+        for row in rows
+    }
 
 
 def rank_and_cutoff(session: Session, rows: list[ContentRow], run_date: date) -> list[RankedItem]:
-    """PRD §5.5 — Score 임계치 컷오프 + 어제 노출 항목 제외 + 소스별 최대 개수 제한
-    (arXiv/GitHub처럼 관심사 용어와 문자 그대로 겹치는 소스가 embedding relevance에서
-    유리해 전체를 독식하는 걸 방지) + High 카테고리 최소 1개 다양성 보장."""
+    """PRD §5.5 — RRF로 relevance/importance/novelty/credibility를 결합해 랭킹 +
+    어제 노출 항목 제외 + 소스별 최대 개수 제한 + High 카테고리 최소 1개 다양성 보장.
+
+    (구) score_threshold/min_items 기반 컷오프는 RRF 점수가 원점수와 스케일이 달라
+    더 이상 의미가 없어 제거함 — RRF는 절대적 "좋음"이 아니라 오늘 후보군 내 상대
+    순위이므로, 컷오프는 max_items_per_source(다양성)만으로 충분."""
     settings = get_pipeline_settings()["digest"]
     recent_ids = repository.get_recent_digest_content_ids(session, days=1)
 
     fresh_rows = [r for r in rows if r.id not in recent_ids]
-    scored = sorted(((r, _final_score(r)) for r in fresh_rows), key=lambda pair: pair[1], reverse=True)
-
-    above_threshold = [(r, s) for r, s in scored if s >= settings["score_threshold"]]
-    candidates = above_threshold if len(above_threshold) >= settings["min_items"] else scored
+    rrf = _rrf_scores(fresh_rows)
+    candidates = sorted(((r, rrf[r.id]) for r in fresh_rows), key=lambda pair: pair[1], reverse=True)
 
     max_items = settings["max_items"]
     max_per_source = settings.get("max_items_per_source")
@@ -59,7 +80,7 @@ def rank_and_cutoff(session: Session, rows: list[ContentRow], run_date: date) ->
                     selected.append((r, s, True))
                 break
 
-    selected = selected[: max_items]
+    selected = selected[:max_items]
     for row, _, _ in selected:
         row.status = "included"
     session.commit()

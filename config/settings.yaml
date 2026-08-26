@@ -3,9 +3,10 @@ budget:
   monthly_max_usd: 30.0
 
 digest:
-  score_threshold: 70
+  # score_threshold / min_items는 RRF 도입(2026-08-26) 이후 미사용 — RRF 점수는
+  # 원점수(0~100) 스케일이 아니라 "오늘 후보군 내 상대 순위"라서 절대 임계치가
+  # 의미가 없어짐. 컷오프는 max_items + max_items_per_source만으로 처리.
   max_items: 10
-  min_items: 5
   diversity_min_per_high_category: 1
   max_items_per_source: 4   # 예: arXiv/GitHub Trending 같은 소스 하나가 최종 10개를 독식하지 못하게
 

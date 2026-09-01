@@ -32,7 +32,7 @@ def _rank_within(rows: list[ContentRow], key: str) -> dict[uuid.UUID, int]:
     return {row.id: i + 1 for i, row in enumerate(ordered)}
 
 
-def _rrf_scores(rows: list[ContentRow]) -> dict[uuid.UUID, float]:
+def rrf_scores(rows: list[ContentRow]) -> dict[uuid.UUID, float]:
     rank_maps = {key: _rank_within(rows, key) for key in _SIGNAL_WEIGHTS}
     return {
         row.id: sum(weight / (_RRF_K + rank_maps[key][row.id]) for key, weight in _SIGNAL_WEIGHTS.items())
@@ -51,7 +51,7 @@ def rank_and_cutoff(session: Session, rows: list[ContentRow], run_date: date) ->
     recent_ids = repository.get_recent_digest_content_ids(session, days=1)
 
     fresh_rows = [r for r in rows if r.id not in recent_ids]
-    rrf = _rrf_scores(fresh_rows)
+    rrf = rrf_scores(fresh_rows)
     candidates = sorted(((r, rrf[r.id]) for r in fresh_rows), key=lambda pair: pair[1], reverse=True)
 
     max_items = settings["max_items"]

@@ -23,7 +23,7 @@ from app.pipeline.embed_filter import embed_filter
 from app.pipeline.llm_analyze import analyze_items
 from app.pipeline.llm_score import score_items
 from app.pipeline.normalize import normalize
-from app.pipeline.rank import rank_and_cutoff
+from app.pipeline.rank import rank_and_cutoff, rrf_scores
 from app.pipeline.trend_summary import summarize_trends
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -47,11 +47,6 @@ COLLECTOR_FACTORIES = {
 
 # LLM 정밀분석(2차) 대상으로 넘길 상위 후보 수 — 1차 스코어링을 통과한 것 중 이만큼만 Sonnet 호출
 ANALYZE_TOP_N = 20
-
-
-def _pre_llm_rank(row) -> float:
-    scores = row.scores or {}
-    return scores.get("relevance", 0) * 10 + scores.get("importance", 0) + scores.get("novelty", 0)
 
 
 def run() -> None:
@@ -87,7 +82,13 @@ def run() -> None:
         llm_client.require_api_key()
 
         scored_rows = score_items(session, passed_rows, run_date)
-        top_rows = sorted(scored_rows, key=_pre_llm_rank, reverse=True)[:ANALYZE_TOP_N]
+        # 정밀분석(top 20) 선정도 최종 랭킹과 동일한 weighted RRF를 재사용한다 — 예전엔
+        # relevance*10+importance+novelty처럼 별도의 손튜닝 가중합을 썼는데, 최종 랭킹과
+        # 똑같은 스케일 불일치 문제로 relevance 높은 기업 블로그 글이 이 단계에서부터
+        # 탈락하는 걸 실측으로 확인함(2026-08-26) — 최종 랭킹의 cap이 아무리 좋아도
+        # 애초에 분석 후보에 못 들면 손 쓸 방법이 없었음.
+        pre_rrf = rrf_scores(scored_rows)
+        top_rows = sorted(scored_rows, key=lambda r: pre_rrf[r.id], reverse=True)[:ANALYZE_TOP_N]
         analyzed_rows = analyze_items(session, top_rows, run_date)
         trend_text = summarize_trends(session, passed_rows, run_date)
 

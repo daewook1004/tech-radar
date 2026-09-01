@@ -1,8 +1,8 @@
 # Personal Tech Intelligence / Tech Radar — 아키텍처 & 데이터 모델 설계
 
-- 작성일: 2026-08-26
+- 작성일: 2026-08-26 (2026-09-01 실측 반영 갱신 — RRF 랭킹, 소스 cap, 전체 목록 섹션, Gmail 발송)
 - 전제: [PRD.md](./PRD.md)의 MVP 요구사항 확정 + 기술 스파이크 결과를 그대로 따른다.
-- 상태: 설계 완료, 구현 착수 전 단계.
+- 상태: **5개 소스(GeekNews/HN/GitHub/arXiv/RSS) 전부 구현·실동작 검증 완료.** 자동 스케줄링·Next.js 대시보드·VPS 배포는 미착수 — 현재는 로컬 `uv run` 수동 실행 + Docker(postgres만).
 
 ---
 
@@ -176,7 +176,7 @@ CREATE INDEX idx_content_collected_at ON content (collected_at);
 CREATE INDEX idx_content_status ON content (status);
 ```
 
-- 90일 리텐션은 `collected_at < now() - interval '90 days'` 조건으로 파이프라인 마지막 단계에서 배치 삭제.
+- 90일 리텐션은 `collected_at < now() - interval '90 days'` 조건으로 배치 삭제할 계획이나 **아직 미구현**(§10).
 - `content_hash` UNIQUE 제약으로 DB 레벨에서도 완전 중복 삽입을 차단(어플리케이션 레벨 유사도 dedup과 별개의 안전망).
 
 ### 4.2 `pipeline_run` — 실행 이력 (실패 처리·관찰성)
@@ -333,13 +333,14 @@ budget:
   monthly_max_usd: 30.0
 
 digest:
-  score_threshold: 70
   max_items: 10
-  min_items: 5
   diversity_min_per_high_category: 1
+  max_items_per_source: 4   # 소스 하나가 최종 목록을 독식하지 못하게 (2026-08-27 도입)
 
-retention_days: 90
+retention_days: 90   # 설정값만 존재 — 실제 삭제 로직은 아직 미구현, §11 참조
 ```
+
+`score_threshold`/`min_items`는 2026-08-27 RRF 도입 이후 제거됨 — RRF 점수는 절대적 "좋음"이 아니라 오늘 후보군 내 상대 순위라 절대 임계치가 의미 없어짐(§6.5 참조).
 
 ---
 
@@ -347,18 +348,22 @@ retention_days: 90
 
 ```
 run_pipeline.py
-  ├─ 1. collect      — 소스별로 try/except 격리. 실패한 소스는 pipeline_run.failures에 기록하고 계속 진행
-  ├─ 2. normalize     — 공통 스키마 정규화, content_hash 계산
-  ├─ 3. dedup         — URL 정규화 + 제목/본문 유사도로 단순 중복 제거
-  ├─ 4. embed_filter  — 관심사 카테고리 임베딩 대비 cosine similarity로 Relevance 계산, 상위 후보만 통과
-  ├─ 5. llm_score     — gpt-5.6-luna: Importance/Novelty/Credibility (필터 통과 후보 전체)
-  ├─ 6. llm_analyze   — gpt-5.6-sol: 상위 후보만 요약 + 추천 이유 (구조화 출력)
-  ├─ 7. trend_summary — gpt-5.6-sol: 필터 통과 후보군 전체 대상 "오늘의 주요 흐름" 1회 호출
-  ├─ 8. rank          — Score 임계치 컷오프 + High 카테고리 최소 1개 다양성 보장 + 어제 노출 항목(digest_item) 제외
-  └─ 9. deliver        — digest/digest_item 영속화 + 이메일 발송(전체 콘텐츠) + 90일 이전 content 삭제
+  ├─ 1. collect            — 소스별로 try/except 격리. 실패한 소스는 pipeline_run.failures에 기록하고 계속 진행
+  ├─ 2. normalize           — 공통 스키마 정규화, content_hash 계산
+  ├─ 3. dedup               — URL 정규화 + 제목/본문 유사도로 단순 중복 제거
+  ├─ 4. persist             — content 테이블에 upsert(ON CONFLICT DO NOTHING)
+  ├─ 5. embed_filter        — 관심사 카테고리 임베딩 대비 cosine similarity로 Relevance 계산, 상위 50건만 통과
+  ├─ 6. llm_score           — gpt-5.6-luna: Importance/Novelty/Credibility (필터 통과 후보 전체)
+  ├─ 6.5 정밀분석 대상 선정  — rrf_scores()로 통과 후보 전체를 재랭킹, 상위 20건만 다음 단계로
+  ├─ 7. llm_analyze         — gpt-5.6-sol: 20건만 요약 + 추천 이유 (구조화 출력)
+  ├─ 8. trend_summary       — gpt-5.6-sol: 필터 통과 후보군 전체(~50건) 대상 "오늘의 주요 흐름" 1회 호출
+  ├─ 9. rank_and_cutoff     — 어제 노출 항목(digest_item) 제외 → rrf_scores() 재적용 → 소스당 최대 4개 cap → High 카테고리 0개면 1개 강제 포함 → 최종 10개
+  └─ 10. deliver             — digest/digest_item 영속화 + Gmail 발송(콘솔 폴백) + output/{date}.txt 저장 (MUST READ + 트렌드 요약 + 오늘 수집 전체 목록)
 ```
 
-각 단계는 **소스/항목 단위로 실패를 격리**하고 `pipeline_run.failures`에 기록한다. 4~7단계에서 매 LLM 호출 전 `cost_ledger` 합계를 확인해 예산 초과 시 파이프라인을 중단하고 그때까지의 결과로 발송한다(§9).
+**6단계(llm_score)와 9단계(rank_and_cutoff)는 같은 `rrf_scores()` 함수를 재사용한다** — 처음엔 6.5단계가 `relevance*10+importance+novelty` 식의 별도 손튜닝 공식을 썼는데, 9단계와 똑같은 스케일 불일치 문제로 relevance 높은 콘텐츠(예: 기업 블로그)가 정밀분석 대상에도 못 드는 게 실측으로 확인돼 2026-08-27 통일함(§6.5 참조).
+
+각 단계는 **소스/항목 단위로 실패를 격리**하고 `pipeline_run.failures`에 기록한다. 6~8단계에서 매 LLM 호출 전 `cost_ledger` 합계를 확인해 예산 초과 시 파이프라인을 중단하고 그때까지의 결과로 발송한다(§9). `retention_days`(90일 삭제)는 설정값만 있고 실제 삭제 로직은 아직 구현 안 됨(§11).
 
 ---
 
@@ -377,6 +382,20 @@ run_pipeline.py
 | llm_score | gpt-5.6-luna | title, text 발췌, source, tags | `{importance: 1-10, novelty: 1-10, credibility: 1-10, reason: str}` |
 | llm_analyze | gpt-5.6-sol | 위 정보 + relevance + 관심사 프로필 | `{summary: str, why_important: str, topic: str, keywords: [str], content_type: str}` |
 | trend_summary | gpt-5.6-sol (1일 1회) | 필터 통과 후보 전체의 title+tags 목록 | 3~5줄 텍스트 (`response.output_text`) |
+
+### 7.3 랭킹 방법론: Weighted Reciprocal Rank Fusion (2026-08-27 도입)
+
+원래는 `final_score = relevance*40 + importance*3 + novelty*2 + credibility*1`처럼 원점수에 손으로 정한 가중치를 곱해 더했으나, relevance(임베딩 0~1)와 importance/novelty/credibility(LLM 채점 1~10)는 스케일이 전혀 달라 "40"이라는 숫자에 이론적 근거가 없었다. **Elasticsearch/OpenSearch 등이 벡터검색+키워드검색을 합칠 때 쓰는 RRF(Reciprocal Rank Fusion)로 교체**:
+
+```python
+# app/pipeline/rank.py
+RRF_score(item) = Σ  weight_i / (60 + rank_i(item))   # k=60은 업계 표준값
+weights = {relevance: 3, importance: 1, novelty: 1, credibility: 1}
+```
+
+신호마다 후보군 전체를 따로 정렬해 순위를 매긴 뒤 합산 — 원점수의 절대적 크기가 아니라 순위만 쓰므로 스케일 문제가 애초에 발생하지 않는다. **동일 가중치(전부 1)는 오히려 역효과**였음을 실측으로 확인(relevance 0.19인 GeekNews 뉴스가 가중합 47위 → 동일 가중치 RRF 15위로 상승) — relevance가 "4표 중 1표"로만 취급되면서 importance 최상위 랭크 하나가 낮은 relevance를 압도했기 때문. relevance 3배 가중치로 교정.
+
+`rank.rrf_scores()`는 **두 곳에서 재사용**된다: ①정밀분석(top 20) 선정 단계, ②최종 랭킹(rank_and_cutoff) 단계. 같은 스케일 불일치 문제가 ①에서도 발생해 relevance 높은 콘텐츠(기업 블로그 등)가 정밀분석 대상에도 못 드는 걸 확인해 통일함.
 
 gpt-5.6-luna는 OpenAI 공식 모델 카탈로그에서 "cost-sensitive, high-volume workloads" 전용으로 포지셔닝된 모델이라 1차 스코어링에 적합. gpt-5.6-sol(=gpt-5.6, 최상위 플래그십)은 2차 분석 볼륨이 하루 5~10건뿐이라 중간 티어(gpt-5.6-terra)와 비용 차이가 미미해, 품질을 우선해 선택(사용자 확정).
 
@@ -427,11 +446,18 @@ services:
 
 ---
 
-## 10. 아직 결정되지 않은 실행 세부사항 (구현 착수 시 확정)
+## 10. 실행 세부사항 현황 (2026-09-01 갱신)
 
-- RSS 블로그 URL 실제 값 검증 (§5 예시는 플레이스홀더)
-- `content_hash` 유사도 dedup의 정확한 임계값(제목 유사도 몇 % 이상을 중복으로 볼지)
-- 관심사 가중치의 정확한 수치화 방식(High/Medium/Low → 0.0~1.0 매핑 공식)
-- Alembic 마이그레이션 초기 세팅
-- Caddyfile의 Basic Auth 자격증명 저장 방식 (환경 변수 vs `.env`)
-- (PRD §11에서 이미 명시된 항목들: arXiv 카테고리 매핑, 이메일 발송 서비스, GitHub Trending 근사치 쿼리 파라미터)
+### 해결됨
+- RSS 블로그 URL 실제 값 검증 완료 (OpenAI/HuggingFace/Google AI/PyTorch Korea/TechBlogPosts). Anthropic/Meta AI는 쓸만한 공식 RSS가 없어 목록에서 제외
+- `content_hash` 완전 일치 + 제목 유사도(`SequenceMatcher` ratio ≥ 0.85) dedup 구현 (`app/pipeline/dedup.py`)
+- 관심사 가중치: High=1.0 / Medium=0.5 / Low=0.1 (`app/pipeline/embed_filter.py`)
+- 이메일 발송: Gmail SMTP + 앱 비밀번호 (`app/pipeline/deliver.py`) — 실제 발송 검증 완료
+- GitHub Trending 근사치 쿼리 파라미터: `config/sources.yaml`의 `keywords`/`created_within_days`/`min_stars`
+
+### 아직 미결정/미구현
+- **`retention_days`(90일) 삭제 로직 미구현** — 설정값만 있고 실제 배치 삭제 코드 없음
+- 정밀분석(top 20) 선정 단계까지는 RRF cap 없음 — 최종 랭킹엔 소스당 최대 4개 cap이 있지만, top 20이 특정 소스(예: 한 회사 블로그)로 쏠리면 다른 소스는 애초에 최종 후보가 될 기회가 없음. 필요성 재검토 중
+- Caddyfile의 Basic Auth 자격증명 저장 방식 (환경 변수 vs `.env`) — 대시보드 자체가 아직 없어 보류
+- LLM 채점 프롬프트에 calibration anchor(예: "novelty 10점 = 패러다임 전환급") 추가 검토 — importance/novelty 점수 압축 완화용, 아직 미시도
+- 자동 스케줄링(Cron), Next.js 대시보드, VPS 배포 전부 미착수 — §9는 설계만 있고 실제 배포 환경 없음

@@ -48,7 +48,7 @@ def rank_and_cutoff(session: Session, rows: list[ContentRow], run_date: date) ->
     더 이상 의미가 없어 제거함 — RRF는 절대적 "좋음"이 아니라 오늘 후보군 내 상대
     순위이므로, 컷오프는 max_items_per_source(다양성)만으로 충분."""
     settings = get_pipeline_settings()["digest"]
-    recent_ids = repository.get_recent_digest_content_ids(session, days=1)
+    recent_ids = repository.get_recent_digest_content_ids(session, run_date, days=1)
 
     fresh_rows = [r for r in rows if r.id not in recent_ids]
     rrf = rrf_scores(fresh_rows)

@@ -71,13 +71,16 @@ def finish_pipeline_run(session: Session, run: PipelineRun, status: str, stats: 
     session.commit()
 
 
-def get_recent_digest_content_ids(session: Session, days: int = 1) -> set:
-    """최근 N일 digest에 이미 포함됐던 content_id 집합 — freshness(어제 노출 제외) 판단용."""
-    cutoff = date.today() - timedelta(days=days)
+def get_recent_digest_content_ids(session: Session, run_date: date, days: int = 1) -> set:
+    """run_date 기준 최근 N일(당일 제외)에 이미 포함됐던 content_id — freshness(어제 노출 제외) 판단용.
+    date.today()가 아니라 run_date를 기준으로 삼고 Digest.run_date < run_date로 당일을 제외해야 한다 —
+    안 그러면 같은 날 파이프라인이 재실행(수동 재시도, cron과 겹침 등)될 때 몇 분 전 자기 자신이 만든
+    오늘자 digest 항목까지 '최근 노출'로 잘못 판단해 후보군이 부당하게 줄어든다 (2026-09-02 실측)."""
+    cutoff = run_date - timedelta(days=days)
     stmt = (
         select(DigestItem.content_id)
         .join(Digest, Digest.id == DigestItem.digest_id)
-        .where(Digest.run_date >= cutoff)
+        .where(Digest.run_date >= cutoff, Digest.run_date < run_date)
     )
     return set(session.scalars(stmt).all())
 

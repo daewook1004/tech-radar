@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Tech Radar — 지난 다이제스트{% endblock %}
+{% block content %}
+<h1>지난 다이제스트</h1>
+{% if not digests %}
+  <p class="muted">아직 생성된 다이제스트가 없습니다.</p>
+{% endif %}
+{% for d in digests %}
+  <a class="card" style="display:block" href="/digests/{{ d.run_date.isoformat() }}">
+    <div style="display:flex; justify-content:space-between; align-items:baseline; gap:1rem;">
+      <strong>{{ d.run_date.isoformat() }}</strong>
+      <span class="badge {% if d.email_status == 'failed' %}fail{% endif %}">
+        {{ d.items|length }}건 · {{ d.email_status or "미발송" }}
+      </span>
+    </div>
+    {% if d.trend_summary %}
+      {% set preview = d.trend_summary | strip_markdown %}
+      <p class="muted" style="margin:0.5rem 0 0; font-size:0.9rem;">
+        {{ preview[:120] }}{% if preview|length > 120 %}…{% endif %}
+      </p>
+    {% endif %}
+  </a>
+{% endfor %}
+{% endblock %}

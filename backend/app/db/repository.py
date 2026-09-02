@@ -1,6 +1,6 @@
 from datetime import date, datetime, timedelta
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -110,3 +110,32 @@ def save_digest(
         )
     session.commit()
     return digest
+
+
+def list_digests(session: Session) -> list[Digest]:
+    stmt = select(Digest).order_by(Digest.run_date.desc())
+    return list(session.scalars(stmt).all())
+
+
+def get_digest_detail(
+    session: Session, run_date: date
+) -> tuple[Digest, list[tuple[DigestItem, ContentRow]]] | None:
+    digest = session.scalar(select(Digest).where(Digest.run_date == run_date))
+    if digest is None:
+        return None
+
+    stmt = (
+        select(DigestItem, ContentRow)
+        .join(ContentRow, ContentRow.id == DigestItem.content_id)
+        .where(DigestItem.digest_id == digest.id)
+        .order_by(DigestItem.rank)
+    )
+    items = [(item, content) for item, content in session.execute(stmt).all()]
+    return digest, items
+
+
+def get_content_by_date(session: Session, run_date: date) -> list[ContentRow]:
+    """상세보기의 '전체 수집 목록' 섹션용 — 이메일의 _render_full_list와 동일한 정보.
+    Content에는 run_date FK가 없어 collected_at 날짜로 근사한다 (수집·발송이 같은 날 배치이므로 정확)."""
+    stmt = select(ContentRow).where(func.date(ContentRow.collected_at) == run_date)
+    return list(session.scalars(stmt).all())

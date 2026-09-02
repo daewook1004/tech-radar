@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Tech Radar — {{ digest.run_date.isoformat() }}{% endblock %}
+
+{% macro item_list(rows, selected_ids) %}
+  <ul style="padding-left:1.1rem; margin:0;">
+    {% for row in rows %}
+      <li>
+        <a href="{{ row.url }}" target="_blank" rel="noopener">{{ row.title }}</a>
+        {% if row.id in selected_ids %}<span class="badge">MUST READ</span>{% endif %}
+      </li>
+    {% endfor %}
+  </ul>
+{% endmacro %}
+
+{% block content %}
+<p class="muted"><a href="/digests">&larr; 목록으로</a></p>
+<h1>{{ digest.run_date.isoformat() }}</h1>
+
+{% if digest.trend_summary %}
+<div class="card">
+  <strong>오늘의 주요 흐름</strong>
+  <div style="margin-top:0.5rem;">{{ digest.trend_summary | markdown }}</div>
+</div>
+{% endif %}
+
+<h2>MUST READ ({{ items|length }})</h2>
+{% for item, content in items %}
+  {% set analysis = content.llm_analysis or {} %}
+  <div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:baseline; gap:1rem;">
+      <strong>{{ item.rank }}. <a href="{{ content.url }}" target="_blank" rel="noopener">{{ content.title }}</a></strong>
+      <span class="badge">종합점수 {{ "%.1f"|format(item.final_score * 1000) }}</span>
+    </div>
+    {% if item.is_diversity_pick %}<span class="badge" style="margin-top:0.4rem;">다양성 보장</span>{% endif %}
+    {% if analysis.summary %}<div style="margin-top:0.5rem;">{{ analysis.summary | markdown }}</div>{% endif %}
+    {% if analysis.why_important %}
+      <p class="muted" style="margin:0.4rem 0 0; font-size:0.9rem;">왜 중요한가: {{ analysis.why_important }}</p>
+    {% endif %}
+    <p class="muted" style="margin:0.4rem 0 0; font-size:0.85rem;">{{ content.source }}</p>
+  </div>
+{% endfor %}
+
+{% if by_source %}
+<details style="margin-top:2rem;">
+  <summary style="cursor:pointer; font-size:1.1rem; font-weight:600; padding:0.25rem 0;">
+    오늘 수집된 전체 목록 ({{ by_source.values()|map("length")|sum }}건) — 펼쳐서 보기
+  </summary>
+  <div style="margin-top:1rem;">
+  {% for source, rows in by_source.items() %}
+    <p class="muted" style="margin:1rem 0 0.4rem; font-size:0.85rem; text-transform:uppercase; letter-spacing:0.03em;">
+      {{ source }} ({{ rows|length }}건)
+    </p>
+    {{ item_list(rows[:10], selected_ids) }}
+    {% if rows|length > 10 %}
+      <details style="margin:0.3rem 0 0 1.1rem;">
+        <summary class="muted" style="cursor:pointer; font-size:0.85rem;">+{{ rows|length - 10 }}개 더보기</summary>
+        <div style="margin-top:0.3rem;">{{ item_list(rows[10:], selected_ids) }}</div>
+      </details>
+    {% endif %}
+  {% endfor %}
+  </div>
+</details>
+{% endif %}
+{% endblock %}

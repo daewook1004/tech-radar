@@ -17,6 +17,8 @@ dependencies = [
     "openai",
     "fastembed",
     "numpy",
+    "jinja2",
+    "markdown",
 ]
 
 [tool.uv]

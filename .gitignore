@@ -9,6 +9,9 @@ __pycache__/
 # Env
 .env
 
+# AWS EC2 SSH 키 (절대 커밋 금지)
+*.pem
+
 # Node (frontend, added in a later phase)
 node_modules/
 .next/

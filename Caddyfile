@@ -1,0 +1,7 @@
+# 도메인 TLS(Let's Encrypt 자동 발급) + /health 프록시만.
+# 대시보드가 생기면 여기에 Basic Auth + 정적 페이지 프록시를 추가할 예정
+# (docs/ARCHITECTURE.md §9 참조).
+
+{$DOMAIN} {
+	reverse_proxy backend:8000
+}

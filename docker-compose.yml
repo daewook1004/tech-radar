@@ -30,7 +30,25 @@ services:
     ports:
       - "8000:8000"
 
-# frontend + proxy(Caddy)는 Phase 3(대시보드 구현)에서 추가 예정 — docs/ARCHITECTURE.md §9 참조
+  # 대시보드(Next.js)는 아직 없음 — 지금은 도메인 TLS + /health 프록시만.
+  # DOMAIN이 .env에 없으면(로컬 개발) 이 서비스는 그냥 안 쓰면 됨:
+  # `docker compose up -d postgres backend`처럼 필요한 서비스만 지정해서 띄우기.
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
 
 volumes:
   pgdata:
+  caddy_data:
+  caddy_config:

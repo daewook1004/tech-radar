@@ -10,8 +10,12 @@ from app.schemas.content import Content as ContentSchema
 
 
 def upsert_content_batch(session: Session, items: list[ContentSchema]) -> list[ContentRow]:
-    """중복(content_hash)은 DB 레벨에서도 안전망으로 무시하고, 최종적으로
-    이번 배치에 해당하는 모든 행(신규 삽입 + 기존 존재분)을 DB 상태 그대로 반환한다."""
+    """content_hash가 이미 DB에 있는 글(다른 날 이미 수집됐다가 소스에 다시 노출된 것)은
+    오늘 배치에서 조용히 걸러낸다. RETURNING은 실제로 새로 INSERT된 행만 돌려주므로,
+    이미 존재하는 행은 자동으로 파이프라인 뒤 단계(재채점, "전체 목록" 노출 등)에서 빠진다.
+    이전엔 SELECT ... WHERE content_hash IN (...)으로 기존 행까지 같이 반환해서,
+    RSS 7일 lookback·HN 프론트 체류 등으로 같은 글이 매일 재수집될 때마다 LLM으로
+    재채점되고 다이제스트 전체 목록에도 매일 반복 노출됐다(2026-09-03 실측)."""
     if not items:
         return []
 
@@ -35,12 +39,14 @@ def upsert_content_batch(session: Session, items: list[ContentSchema]) -> list[C
         )
         for item in items
     ]
-    stmt = pg_insert(ContentRow).values(rows).on_conflict_do_nothing(index_elements=["content_hash"])
-    session.execute(stmt)
+    stmt = (
+        pg_insert(ContentRow)
+        .values(rows)
+        .on_conflict_do_nothing(index_elements=["content_hash"])
+        .returning(ContentRow)
+    )
+    result = session.execute(stmt)
     session.commit()
-
-    hashes = [item.content_hash for item in items]
-    result = session.execute(select(ContentRow).where(ContentRow.content_hash.in_(hashes)))
     return list(result.scalars().all())
 
 

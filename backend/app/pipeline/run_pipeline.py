@@ -1,8 +1,14 @@
 import logging
 import sys
-from datetime import date
+from datetime import datetime, timedelta, timezone
 
 import openai
+
+# 서버(컨테이너)는 UTC로 도는데 cron은 한국 시간 아침 배송에 맞춰 22:00 UTC(=KST 07:00,
+# 다음날)에 실행된다. date.today()를 그대로 쓰면 서버 시계가 아직 "어제"라 다이제스트
+# 날짜가 하루 밀려서 찍힌다(2026-09-04 실측) — run_date는 서버 시간대와 무관하게
+# 항상 KST 기준 달력 날짜로 명시적으로 계산한다.
+_KST = timezone(timedelta(hours=9))
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -50,7 +56,7 @@ ANALYZE_TOP_N = 20
 
 
 def run() -> None:
-    run_date = date.today()
+    run_date = datetime.now(_KST).date()
     session = get_session()
     run = repository.start_pipeline_run(session, run_date)
 

@@ -92,7 +92,6 @@ Python 3.11 · FastAPI · SQLAlchemy 2.0 + psycopg3 · PostgreSQL · Alembic · 
 
 - [docs/PRD.md](docs/PRD.md) — 제품 요구사항. 딥 인터뷰 8라운드로 범위를 확정한 기록
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — 디렉터리 구조, DB 스키마, 파이프라인 단계, 랭킹 방법론
-- [docs/RAG_BLUEPRINT.md](docs/RAG_BLUEPRINT.md) — 다음 단계(자연어 질의 레이어) 설계 스케치
 
 ## 아직 안 한 것
 

@@ -93,10 +93,4 @@ Python 3.11 · FastAPI · SQLAlchemy 2.0 + psycopg3 · PostgreSQL · Alembic · 
 - [docs/PRD.md](docs/PRD.md) — 제품 요구사항. 딥 인터뷰 8라운드로 범위를 확정한 기록
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — 디렉터리 구조, DB 스키마, 파이프라인 단계, 랭킹 방법론
 
-## 아직 안 한 것
-
-- **랭킹 품질의 정량 평가** — 라벨링된 평가셋 없이 사례 기반으로만 튜닝된 상태
-- **RAG 질의 레이어** — 과거 다이제스트에 자연어로 질문하기 (설계만 있음)
-- **90일 보존 정책** — 설정값만 있고 실제 삭제 배치는 없음
-- **대시보드 검색/필터** — 현재는 날짜별 목록 + 상세 조회만
-- **Basic Auth** — 코드에는 있으나 현재 미설정 (자격증명이 비어있으면 통과)
+각 버전의 범위와 현재 한계는 [릴리즈 노트](https://github.com/daewook1004/tech-radar/releases)에 정리돼 있다.

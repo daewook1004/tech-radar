@@ -4,17 +4,25 @@ from openai import OpenAI
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.config import get_interests
 from app.db.models import Content as ContentRow
 from app.llm import client as llm_client
 
 MODEL = "gpt-5.6-sol"  # 최상위 플래그십 — 하루 5~10건뿐이라 비용보다 품질 우선(사용자 확정)
 
-SYSTEM_PROMPT = (
-    "너는 AI/개발 기술 뉴스를 깊이 있게 분석하는 애널리스트다. 주어진 글을 읽고 "
-    "핵심 요약, 왜 중요한지에 대한 설명, 주제(topic), 핵심 키워드, 콘텐츠 유형을 "
-    "모두 한국어로 작성해라. topic은 관심사 카테고리 이름과 최대한 맞춰서 표현해라 "
-    "(예: LLM Engineering, RAG, Agent, AI Coding, LLM Evaluation, Inference, Healthcare AI 등)."
-)
+
+def _system_prompt() -> str:
+    """topic 예시는 interests.yaml에서 직접 읽어온다 — 예전엔 프롬프트에 카테고리 이름을
+    하드코딩해뒀는데, 관심사를 추가해도 프롬프트가 그대로라 LLM이 새 카테고리 이름을
+    모르는 채로 topic을 붙였다. rank.py의 다양성 보장은 'LLM이 붙인 topic == high 카테고리
+    이름'으로 대조하므로, 둘이 어긋나면 다양성 보장이 조용히 작동을 멈춘다(2026-09-07)."""
+    names = [cat["name"] for cats in get_interests().values() for cat in cats]
+    return (
+        "너는 AI/개발 기술 뉴스를 깊이 있게 분석하는 애널리스트다. 주어진 글을 읽고 "
+        "핵심 요약, 왜 중요한지에 대한 설명, 주제(topic), 핵심 키워드, 콘텐츠 유형을 "
+        "모두 한국어로 작성해라. topic은 아래 관심사 카테고리 이름 중 가장 가까운 것을 "
+        f"그대로 사용해라 (해당하는 게 없을 때만 새로 만들어라): {', '.join(names)}."
+    )
 
 
 class AnalysisOutput(BaseModel):
@@ -40,7 +48,7 @@ def analyze_items(session: Session, rows: list[ContentRow], run_date: date) -> l
         response = client.responses.parse(
             model=MODEL,
             input=[
-                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "system", "content": _system_prompt()},
                 {"role": "user", "content": user_content},
             ],
             text_format=AnalysisOutput,

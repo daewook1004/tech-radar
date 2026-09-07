@@ -36,3 +36,7 @@ rss_blogs:
     url: "https://pytorch.kr/feed.xml"                     # 검증 완료 (2026-08-26)
   - name: "TechBlogPosts (국내 기업 기술 블로그 애그리게이터)"
     url: "https://www.techblogposts.com/rss.xml"            # 검증 완료 (2026-08-26)
+  - name: "HCI Today"
+    url: "https://www.hci.today/api/feed"                   # 검증 완료 (2026-09-07, 하루 4~5건).
+                                                            # 사이트가 <link rel=alternate>로 광고하는 경로가 /api/feed다
+                                                            # (/rss, /feed 등은 SPA 셸 HTML을 200으로 돌려주니 주의).

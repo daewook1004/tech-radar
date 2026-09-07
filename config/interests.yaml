@@ -12,7 +12,13 @@ high:
   - name: "Inference"
     description: "LLM 추론 최적화, 서빙, 배포"
   - name: "Healthcare AI"
-    description: "의료 분야 AI 응용"
+    description: "의료 분야 AI 응용 — 임상 의사결정 지원, 진단 보조, 의료영상, 의료 특화 LLM, 헬스케어 데이터"
+  - name: "LLM Security"
+    description: "프롬프트 인젝션, 탈옥, 에이전트 권한·시크릿 노출, 가드레일, AI 공급망 보안"
+  - name: "Fine-tuning"
+    description: "파인튜닝, LoRA/PEFT, RLHF·DPO·GRPO 등 포스트트레이닝, 정렬 학습, 구조화 출력 학습"
+  - name: "HCI"
+    description: "인간-컴퓨터 상호작용, AI 인터페이스·상호작용 설계, 사용자 연구, AI 도구의 사용성"
 
 medium:
   - name: "AI Product"

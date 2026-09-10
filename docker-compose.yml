@@ -1,6 +1,8 @@
 services:
   postgres:
     image: postgres:16
+    # 재시작 정책이 없으면 호스트 재부팅 후 DB가 안 올라온다(2026-09-11 실측 — caddy만 살아났음).
+    restart: unless-stopped
     environment:
       POSTGRES_USER: techradar
       POSTGRES_PASSWORD: techradar
@@ -17,16 +19,33 @@ services:
 
   backend:
     build: ./backend
+    restart: unless-stopped
+    # 대시보드(상시 컨테이너)와 매일 아침 파이프라인(`docker compose run --rm backend`)이
+    # 둘 다 이 서비스 정의를 쓰므로 상한도 둘 다에 걸린다. 대시보드는 ~100MB라 영향 없고,
+    # 실제로 겨냥하는 건 파이프라인의 임베딩 단계다.
+    #
+    # 2026-09-10 임베딩이 피크 1.7GB까지 치솟으며 스왑 폭주 → CPU 크레딧 소진 →
+    # 서버 전체가 멈췄다. 상한이 없으니 컨테이너 하나가 호스트 전체를 끌고 들어간 것.
+    # - mem_limit: 컨테이너가 차지할 수 있는 RAM 상한. 호스트(909MB)에 sshd·postgres 몫을 남긴다
+    # - memswap_limit: RAM+스왑 총상한. 이걸 넘으면 호스트 전체가 아니라 이 컨테이너만 OOM으로 죽는다
+    # 스왑을 아예 막으면(memswap_limit=mem_limit) import된 라이브러리 같은 안 쓰는 페이지까지
+    # RAM에 붙잡혀 있어야 해서 오히려 OOM이 났다(실측). batch=16 기준 피크 ~530MB, 정상 완료 확인.
+    mem_limit: 750m
+    memswap_limit: 1250m
     env_file:
       - .env
     environment:
       DATABASE_URL: postgresql+psycopg://techradar:techradar@postgres:5432/techradar
       CONFIG_DIR: /app/config
+      # 파이프라인 컨테이너는 --rm으로 매번 지워져서, 캐시를 컨테이너 안에 두면
+      # 임베딩 모델을 매일 새로 다운로드한다. 볼륨에 둬서 한 번만 받게 한다.
+      FASTEMBED_CACHE_PATH: /models
     depends_on:
       postgres:
         condition: service_healthy
     volumes:
       - ./config:/app/config:ro
+      - fastembed_models:/models
     ports:
       - "8000:8000"
 
@@ -52,3 +71,4 @@ volumes:
   pgdata:
   caddy_data:
   caddy_config:
+  fastembed_models:

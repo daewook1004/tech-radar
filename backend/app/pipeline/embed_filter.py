@@ -11,6 +11,13 @@ _MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 _WEIGHT_BY_TIER = {"high": 1.0, "medium": 0.5, "low": 0.1}
 _TOP_K = 50
 
+# fastembed 기본값 256으로 두면 330건이 사실상 한 배치로 들어가서 어텐션 중간값이
+# 폭증한다 — 실측 피크 1.7GB로 서버 RAM(909MB)의 거의 두 배였고, 스왑 폭주 끝에
+# 2026-09-10 서버 전체가 멈췄다. 16으로 줄이면 피크가 0.5~0.7GB로 떨어지고
+# 속도 차이는 거의 없다(로컬 31.8초 → 35.7초). 문서 수가 늘어도 배치 단위라
+# 피크 메모리는 크게 늘지 않는다.
+_BATCH_SIZE = 16
+
 _model: TextEmbedding | None = None
 
 
@@ -49,7 +56,7 @@ def embed_filter(session: Session, rows: list[ContentRow], top_k: int = _TOP_K) 
     category_embeddings = [np.array(e) for e in model.embed(category_texts)]
 
     doc_texts = [f"{r.title}\n{(r.text or '')[:1000]}" for r in rows]
-    doc_embeddings = model.embed(doc_texts)
+    doc_embeddings = model.embed(doc_texts, batch_size=_BATCH_SIZE)
 
     for row, emb in zip(rows, doc_embeddings):
         emb = np.array(emb)

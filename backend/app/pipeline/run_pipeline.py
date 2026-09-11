@@ -31,6 +31,7 @@ from app.llm import client as llm_client
 from app.pipeline.dedup import dedup
 from app.pipeline.deliver import deliver
 from app.pipeline.embed_filter import embed_filter
+from app.pipeline.fetch_body import fill_missing_bodies
 from app.pipeline.llm_analyze import analyze_items
 from app.pipeline.llm_score import score_items
 from app.pipeline.normalize import normalize
@@ -98,6 +99,10 @@ def run() -> None:
     passed_rows = embed_filter(session, content_rows)
     logger.info("passed embed filter: %d/%d items", len(passed_rows), len(content_rows))
 
+    bodies_filled, bodies_missing = fill_missing_bodies(session, passed_rows)
+    logger.info("filled %d empty bodies from the original pages; %d still have none and skip LLM scoring",
+                bodies_filled, bodies_missing)
+
     status = "success"
     try:
         llm_client.require_api_key()
@@ -151,6 +156,8 @@ def run() -> None:
             "deduped": len(deduped),
             "picked_up": len(leftover_rows),
             "passed_filter": len(passed_rows),
+            "bodies_filled": bodies_filled,
+            "bodies_missing": bodies_missing,
             "failure_count": len(failures),
             "peak_rss_mb": peak_rss_mb,
         },

@@ -20,6 +20,7 @@ GeekNews, Hacker News, arXiv, GitHub 트렌딩, 회사 기술 블로그를 매�
 5개 소스 수집(~300건)
    → URL 정규화 + 제목 유사도 중복 제거
    → 임베딩 관련도 필터 (관심사 카테고리 대비 코사인 유사도, 상위 50건)
+   → 본문 없이 들어온 글은 원문 링크에서 본문을 가져와 채움
    → LLM 1차 채점 (importance / novelty / credibility)
    → Weighted RRF로 정밀분석 후보 20건 선정
    → LLM 정밀분석 (요약 + "왜 중요한가")

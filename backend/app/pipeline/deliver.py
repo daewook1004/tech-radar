@@ -50,7 +50,8 @@ def render_digest_text(
         # ×1000만 해서 표시용으로만 스케일업(랭킹 로직에는 영향 없음).
         lines.append(f"{rank}. {row.title} — RRF Score: {rrf_score * 1000:.1f}{tag}")
         lines.append(f"   {analysis.get('summary', '(분석 없음)')}")
-        lines.append(f"   왜 중요한가: {analysis.get('why_important', '-')}")
+        if analysis.get("why_important"):  # 본문이 없어 정밀분석을 건너뛴 글은 요약 안내만 남긴다
+            lines.append(f"   왜 중요한가: {analysis['why_important']}")
         lines.append(f"   URL: {row.url}\n")
     if trend_summary:
         lines.append("=== 오늘의 주요 흐름 ===")

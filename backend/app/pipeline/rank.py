@@ -26,10 +26,17 @@ _RRF_K = 60
 _SIGNAL_WEIGHTS = {"relevance": 3, "importance": 1, "novelty": 1, "credibility": 1}
 
 
-def _rank_within(rows: list[ContentRow], key: str) -> dict[uuid.UUID, int]:
-    """rows를 key 점수 내림차순으로 정렬해 1등부터 순위를 매긴다."""
-    ordered = sorted(rows, key=lambda r: (r.scores or {}).get(key, 0), reverse=True)
-    return {row.id: i + 1 for i, row in enumerate(ordered)}
+def _rank_within(rows: list[ContentRow], key: str) -> dict[uuid.UUID, float]:
+    """rows를 key 점수 내림차순으로 정렬해 1등부터 순위를 매긴다.
+    점수가 없는 행(본문을 못 가져와 LLM 채점을 건너뛴 글)은 '낮음'이 아니라 '모름'이므로
+    꼴찌가 아니라 점수 있는 행들의 가운데 순위를 준다 — 감점도 가점도 없이 다른 신호로 정해지게."""
+    scored = [r for r in rows if key in (r.scores or {})]
+    ordered = sorted(scored, key=lambda r: r.scores[key], reverse=True)
+    ranks: dict[uuid.UUID, float] = {row.id: i + 1 for i, row in enumerate(ordered)}
+    middle = (len(ordered) + 1) / 2
+    for row in rows:
+        ranks.setdefault(row.id, middle)
+    return ranks
 
 
 def rrf_scores(rows: list[ContentRow]) -> dict[uuid.UUID, float]:

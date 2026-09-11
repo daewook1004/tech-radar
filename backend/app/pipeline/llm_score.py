@@ -6,8 +6,11 @@ from sqlalchemy.orm import Session
 
 from app.db.models import Content as ContentRow
 from app.llm import client as llm_client
+from app.pipeline.fetch_body import has_body
 
 MODEL = "gpt-5.6-luna"  # 공식 문서상 "cost-sensitive, high-volume workloads" 전용 모델
+
+_NO_BODY_REASON = "원문 본문을 가져오지 못해 채점하지 않음 — 이 글의 순위는 관련도로만 정해진다"
 
 SYSTEM_PROMPT = (
     "너는 AI/개발 기술 뉴스를 평가하는 애널리스트다. 주어진 글 하나를 읽고 "
@@ -27,6 +30,13 @@ def score_items(session: Session, rows: list[ContentRow], run_date: date) -> lis
     """PRD §5.4 1차(gpt-5.6-luna) — 임베딩 필터를 통과한 후보 전체에 대해 스코어링."""
     client = OpenAI()
     for row in rows:
+        if not has_body(row):
+            # 본문 없이 채점하면 LLM은 '모름'을 '낮음'으로 매긴다(fetch_body.py 참조). 점수를
+            # 비워두면 rank.py가 감점도 가점도 없는 가운데 순위를 준다.
+            row.scores = {**(row.scores or {}), "score_reason": _NO_BODY_REASON}
+            row.status = "scored"
+            continue
+
         llm_client.check_budget(session, run_date)
 
         user_content = f"제목: {row.title}\n출처: {row.source}\n본문 발췌: {(row.text or '')[:1500]}"

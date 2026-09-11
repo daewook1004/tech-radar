@@ -7,8 +7,11 @@ from sqlalchemy.orm import Session
 from app.config import get_interests
 from app.db.models import Content as ContentRow
 from app.llm import client as llm_client
+from app.pipeline.fetch_body import has_body
 
 MODEL = "gpt-5.6-sol"  # 최상위 플래그십 — 하루 5~10건뿐이라 비용보다 품질 우선(사용자 확정)
+
+_NO_BODY_SUMMARY = "원문 본문을 가져오지 못해 요약하지 않았습니다. 링크에서 직접 확인해주세요."
 
 
 def _system_prompt() -> str:
@@ -37,6 +40,13 @@ def analyze_items(session: Session, rows: list[ContentRow], run_date: date) -> l
     """PRD §5.4 2차(gpt-5.6-sol) — 상위 후보만 정밀 요약 + 추천 이유."""
     client = OpenAI()
     for row in rows:
+        if not has_body(row):
+            # 제목만 보고 쓴 요약은 "본문이 제공되지 않아 확인하기 어렵다"로 끝났다 — 2026-09-03~09-11
+            # MUST READ의 21%가 그랬다. 비싼 모델을 부르지 않고 요약이 없다는 사실을 그대로 보여준다.
+            row.llm_analysis = {"summary": _NO_BODY_SUMMARY}
+            row.status = "analyzed"
+            continue
+
         llm_client.check_budget(session, run_date)
 
         relevance = (row.scores or {}).get("relevance")

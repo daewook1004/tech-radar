@@ -50,6 +50,19 @@ def upsert_content_batch(session: Session, items: list[ContentSchema]) -> list[C
     return list(result.scalars().all())
 
 
+def get_unprocessed_content(session: Session, collected_since: datetime) -> list[ContentRow]:
+    """이전 실행이 저장까지만 하고 끝내지 못한 글 — 다음 실행이 이어서 처리하게 한다.
+    upsert_content_batch()는 새로 INSERT된 행만 돌려주므로, 실행이 저장 직후 죽으면 그 행들은
+    status='collected'로 남은 채 다음 날엔 '이미 있는 글'로 걸러져 영영 처리되지 않았다
+    (2026-09-10 서버 정지로 199건이 이렇게 남음). 끝까지 처리된 행은 모두 filtered_out 이후
+    상태로 넘어가므로, collected로 남은 행은 곧 처리가 중간에 끊긴 흔적이다."""
+    stmt = select(ContentRow).where(
+        ContentRow.status == "collected",
+        ContentRow.collected_at >= collected_since,
+    )
+    return list(session.scalars(stmt).all())
+
+
 def start_pipeline_run(session: Session, run_date: date) -> PipelineRun:
     """같은 날 재실행(개발 중 반복 실행 포함)해도 안전하게 상태를 리셋."""
     existing = session.scalar(select(PipelineRun).where(PipelineRun.run_date == run_date))

@@ -351,7 +351,7 @@ run_pipeline.py
   ├─ 1. collect            — 소스별로 try/except 격리. 실패한 소스는 pipeline_run.failures에 기록하고 계속 진행
   ├─ 2. normalize           — 공통 스키마 정규화, content_hash 계산
   ├─ 3. dedup               — URL 정규화 + 제목/본문 유사도로 단순 중복 제거
-  ├─ 4. persist             — content 테이블에 upsert(ON CONFLICT DO NOTHING)
+  ├─ 4. persist             — content 테이블에 upsert(ON CONFLICT DO NOTHING RETURNING) — 새로 들어온 행만 다음 단계로. 이전 실행이 저장만 하고 끝내지 못한 행(status='collected', 3일 이내)도 이어받음
   ├─ 5. embed_filter        — 관심사 카테고리 임베딩 대비 cosine similarity로 Relevance 계산, 상위 50건만 통과
   ├─ 6. llm_score           — gpt-5.6-luna: Importance/Novelty/Credibility (필터 통과 후보 전체)
   ├─ 6.5 정밀분석 대상 선정  — rrf_scores()로 통과 후보 전체를 재랭킹, 상위 20건만 다음 단계로

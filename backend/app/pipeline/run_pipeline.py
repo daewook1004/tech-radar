@@ -2,6 +2,11 @@ import logging
 import sys
 from datetime import datetime, timedelta, timezone
 
+try:
+    import resource  # 리눅스 전용 — 로컬(Windows) 개발 환경에는 없어서 피크 메모리 기록을 건너뛴다
+except ImportError:
+    resource = None
+
 import openai
 
 # 서버(컨테이너)는 UTC로 도는데 cron은 한국 시간 아침 배송에 맞춰 22:00 UTC(=KST 07:00,
@@ -54,6 +59,11 @@ COLLECTOR_FACTORIES = {
 # LLM 정밀분석(2차) 대상으로 넘길 상위 후보 수 — 1차 스코어링을 통과한 것 중 이만큼만 Sonnet 호출
 ANALYZE_TOP_N = 20
 
+# 이전 실행이 중간에 끊겨 저장만 된 글을 며칠 전 것까지 이어서 처리할지. 서버가 하루 이틀
+# 멈췄다 돌아와도 그 사이 글을 살릴 만큼 길게, 며칠 지난 글이 오늘 다이제스트 자리를
+# 차지하지 않을 만큼 짧게.
+LEFTOVER_MAX_AGE = timedelta(days=3)
+
 
 def run() -> None:
     run_date = datetime.now(_KST).date()
@@ -77,8 +87,13 @@ def run() -> None:
     deduped = dedup(normalized)
     logger.info("after dedup: %d/%d items", len(deduped), len(normalized))
 
-    content_rows = repository.upsert_content_batch(session, deduped)
-    logger.info("persisted %d content rows", len(content_rows))
+    # upsert 전에 조회해야 한다 — 이번에 새로 넣을 행도 status='collected'라 뒤에 조회하면 섞인다.
+    leftover_rows = repository.get_unprocessed_content(session, datetime.now(timezone.utc) - LEFTOVER_MAX_AGE)
+    new_rows = repository.upsert_content_batch(session, deduped)
+    logger.info("persisted %d content rows", len(new_rows))
+    if leftover_rows:
+        logger.info("picked up %d rows an earlier run saved but never processed", len(leftover_rows))
+    content_rows = new_rows + leftover_rows
 
     passed_rows = embed_filter(session, content_rows)
     logger.info("passed embed filter: %d/%d items", len(passed_rows), len(content_rows))
@@ -99,7 +114,9 @@ def run() -> None:
         trend_text = summarize_trends(session, passed_rows, run_date)
 
         ranked = rank_and_cutoff(session, analyzed_rows, run_date)
-        deliver(session, run_date, trend_text, ranked, all_items=content_rows)
+        # 전체 목록은 오늘 새로 수집된 글만 — 대시보드 상세 페이지(수집일 기준)와 같은 목록이 되게.
+        # 이어받은 글은 순위 경쟁에만 들어간다.
+        deliver(session, run_date, trend_text, ranked, all_items=new_rows)
 
         if failures:
             status = "partial_failure"
@@ -118,6 +135,12 @@ def run() -> None:
         failures.append({"stage": "llm", "source": None, "error": str(e)})
         status = "partial_failure"
 
+    # 파이프라인 컨테이너는 --rm으로 끝나자마자 지워져서 메모리를 얼마나 썼는지 나중엔 알 수 없다.
+    # 2026-09-10 서버 정지 이후 상한(mem_limit 750m) 대비 여유를 매일 보려고 남긴다.
+    # ru_maxrss는 리눅스에서 KB 단위이고 프로세스 수명 전체의 최댓값이라 임베딩 단계 피크가 잡힌다.
+    peak_rss_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss // 1024 if resource else None
+    logger.info("peak memory (RSS): %s MB", peak_rss_mb)
+
     run.failures = failures
     repository.finish_pipeline_run(
         session,
@@ -126,8 +149,10 @@ def run() -> None:
         {
             "collected": len(collected),
             "deduped": len(deduped),
+            "picked_up": len(leftover_rows),
             "passed_filter": len(passed_rows),
             "failure_count": len(failures),
+            "peak_rss_mb": peak_rss_mb,
         },
     )
     logger.info("pipeline finished: status=%s failures=%s", status, failures)

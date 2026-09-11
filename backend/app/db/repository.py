@@ -145,6 +145,11 @@ def get_digest_detail(
 
 def get_content_by_date(session: Session, run_date: date) -> list[ContentRow]:
     """상세보기의 '전체 수집 목록' 섹션용 — 이메일의 _render_full_list와 동일한 정보.
-    Content에는 run_date FK가 없어 collected_at 날짜로 근사한다 (수집·발송이 같은 날 배치이므로 정확)."""
-    stmt = select(ContentRow).where(func.date(ContentRow.collected_at) == run_date)
+    Content에는 run_date FK가 없어 collected_at 날짜로 근사한다 (수집·발송이 같은 날 배치이므로 정확).
+    run_date가 KST 달력 날짜라 비교도 KST로 해야 한다 — 파이프라인은 KST 07:00(= UTC 전날 22:00)에
+    도는데 DB 시간대가 UTC라, collected_at을 그대로 date()로 자르면 하루 이른 날짜가 나온다.
+    그래서 상세 페이지마다 다음 날 수집분이 붙고 가장 최근 페이지는 비어 있었다
+    (2026-09-04 KST 전환 이후, 2026-09-11 발견)."""
+    collected_kst_date = func.date(func.timezone("Asia/Seoul", ContentRow.collected_at))
+    stmt = select(ContentRow).where(collected_kst_date == run_date)
     return list(session.scalars(stmt).all())

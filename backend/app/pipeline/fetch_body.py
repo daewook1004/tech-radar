@@ -18,6 +18,10 @@ logger = logging.getLogger(__name__)
 # 이보다 짧은 본문은 LLM에게 판단을 맡길 근거가 못 된다고 본다. 원문을 가져와도 여전히
 # 짧으면 LLM 채점·정밀분석을 건너뛰고 '모름'으로 둔다(llm_score.py, llm_analyze.py, rank.py).
 MIN_BODY_CHARS = 200
+# 원문을 가져오는 기준은 그보다 높게 둔다. 200자만 넘으면 안 가져오면, 199자짜리 글은 원문으로
+# 채워져 1500자로 채점되고 201자짜리 GeekNews 요약은 201자 그대로 채점돼 긴 쪽이 유리해진다.
+# 1차 채점은 본문을 1500자까지 읽으므로, 1000자 미만이면 원문을 가져와 분량을 맞춘다.
+FETCH_BELOW_CHARS = 1000
 # 정밀분석이 읽는 최대 길이(llm_analyze.py의 [:4000])와 맞춘다 — 더 저장해도 아무도 안 읽는다.
 MAX_BODY_CHARS = 4000
 
@@ -144,10 +148,14 @@ def _fetch(url: str) -> str:
 
 
 def fill_missing_bodies(session: Session, rows: list[ContentRow]) -> tuple[int, int]:
-    """본문이 MIN_BODY_CHARS보다 짧은 글의 원문을 가져와 text에 덧붙인다.
+    """본문이 FETCH_BELOW_CHARS보다 짧은 글의 원문을 가져와 text에 덧붙인다.
     임베딩 relevance는 본문 길이와 무관해서(필터 풀 안 상관 +0.04) 필터를 통과한 글에만 해도 된다 —
     하루 수백 건이 아니라 수십 건만 요청한다. 반환값은 (채운 수, 여전히 본문 없는 수)."""
-    targets = [r for r in rows if not has_body(r) and r.url.startswith("http") and not r.url.startswith(_SKIP_PREFIXES)]
+    targets = [
+        r for r in rows
+        if len((r.text or "").strip()) < FETCH_BELOW_CHARS
+        and r.url.startswith("http") and not r.url.startswith(_SKIP_PREFIXES)
+    ]
     if targets:
         with ThreadPoolExecutor(max_workers=_MAX_WORKERS) as ex:
             bodies = list(ex.map(_fetch, [r.url for r in targets]))

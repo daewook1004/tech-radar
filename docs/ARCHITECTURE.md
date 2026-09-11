@@ -353,7 +353,7 @@ run_pipeline.py
   ├─ 3. dedup               — URL 정규화 + 제목/본문 유사도로 단순 중복 제거
   ├─ 4. persist             — content 테이블에 upsert(ON CONFLICT DO NOTHING RETURNING) — 새로 들어온 행만 다음 단계로. 이전 실행이 저장만 하고 끝내지 못한 행(status='collected', 3일 이내)도 이어받음
   ├─ 5. embed_filter        — 관심사 카테고리 임베딩 대비 cosine similarity로 Relevance 계산, 상위 50건만 통과
-  ├─ 5.5 fill_bodies        — 통과한 글 중 본문 200자 미만(HN 링크 글, 제목만 주는 피드)은 원문 링크에서 본문을 가져와 채움. 그래도 없으면 LLM 채점·정밀분석을 건너뛰고 LLM 신호는 가운데 순위('모름')로 둠
+  ├─ 5.5 fill_bodies        — 통과한 글 중 본문 1000자 미만(HN 링크 글, 제목·짧은 요약만 주는 피드)은 원문 링크에서 본문을 가져와 채움. 그래도 200자 미만이면 LLM 채점·정밀분석을 건너뛰고 LLM 신호는 가운데 순위('모름')로 둠
   ├─ 6. llm_score           — gpt-5.6-luna: Importance/Novelty/Credibility (필터 통과 후보 전체)
   ├─ 6.5 정밀분석 대상 선정  — rrf_scores()로 통과 후보 전체를 재랭킹, 상위 20건만 다음 단계로
   ├─ 7. llm_analyze         — gpt-5.6-sol: 20건만 요약 + 추천 이유 (구조화 출력)

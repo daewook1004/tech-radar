@@ -71,6 +71,16 @@ def test_has_body_threshold():
     assert has_body(_row("x" * MIN_BODY_CHARS))
 
 
+def test_tied_scores_share_a_rank_regardless_of_input_order():
+    # 하루 50건 중 98%가 다른 글과 동점이라, 예전처럼 입력 순서로 순위를 가르면
+    # 임베딩 필터가 뱉은 순서가 랭킹에 그대로 새어들어온다
+    a, b, c = _row(importance=7), _row(importance=7), _row(importance=3)
+    ranks = _rank_within([a, b, c], "importance")
+    assert ranks[a.id] == ranks[b.id] == 1.5  # 1위와 2위를 나눠 가진다
+    assert ranks[c.id] == 3
+    assert _rank_within([b, a, c], "importance") == ranks
+
+
 def test_unscored_rows_get_the_middle_rank_not_last():
     rows = [_row(importance=9), _row(importance=5), _row(importance=1), _row()]
     ranks = _rank_within(rows, "importance")
@@ -79,7 +89,7 @@ def test_unscored_rows_get_the_middle_rank_not_last():
 
 
 def test_unscored_row_lands_between_high_and_low_llm_scores_at_equal_relevance():
-    # relevance는 셋 다 비워 완전히 동률로 둔다 — 같은 값을 넣으면 입력 순서로 동점이 갈려 비교가 흐려진다
+    # relevance는 셋 다 비워 동률로 둔다 — LLM 신호만으로 순위가 갈리는지 보려는 것
     high = _row(importance=9, novelty=9, credibility=9)
     low = _row(importance=1, novelty=1, credibility=1)
     unknown = _row()

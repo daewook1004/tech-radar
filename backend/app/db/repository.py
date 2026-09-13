@@ -104,6 +104,11 @@ def get_recent_digest_content_ids(session: Session, run_date: date, days: int = 
     return set(session.scalars(stmt).all())
 
 
+def get_recent_pipeline_runs(session: Session, limit: int) -> list[PipelineRun]:
+    stmt = select(PipelineRun).order_by(PipelineRun.started_at.desc()).limit(limit)
+    return list(session.scalars(stmt).all())
+
+
 def get_digest(session: Session, run_date: date) -> Digest | None:
     return session.scalar(select(Digest).where(Digest.run_date == run_date))
 

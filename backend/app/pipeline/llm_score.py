@@ -10,7 +10,9 @@ from app.pipeline.fetch_body import has_body
 
 MODEL = "gpt-5.6-luna"  # 공식 문서상 "cost-sensitive, high-volume workloads" 전용 모델
 
-_NO_BODY_REASON = "원문 본문을 가져오지 못해 채점하지 않음 — 이 글의 순위는 관련도로만 정해진다"
+# 순위가 "관련도로만" 정해진다고 쓰지 않는다 — 채점을 건너뛴 글도 rank.py에서 LLM 신호마다
+# 가운데 순위 기여를 받으므로, 채점된 글과 겨룰 때 관련도만으로 결정되지 않는다.
+_NO_BODY_REASON = "원문 본문을 가져오지 못해 LLM 채점을 건너뜀 — 이 글의 LLM 신호는 '모름'으로 둔다"
 
 SYSTEM_PROMPT = (
     "너는 AI/개발 기술 뉴스를 평가하는 애널리스트다. 주어진 글 하나를 읽고 "

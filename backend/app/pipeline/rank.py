@@ -27,12 +27,27 @@ _SIGNAL_WEIGHTS = {"relevance": 3, "importance": 1, "novelty": 1, "credibility":
 
 
 def _rank_within(rows: list[ContentRow], key: str) -> dict[uuid.UUID, float]:
-    """rows를 key 점수 내림차순으로 정렬해 1등부터 순위를 매긴다.
+    """rows를 key 점수 내림차순으로 정렬해 1등부터 순위를 매긴다. 동점은 평균 순위를 나눠 갖는다.
+    예전에는 동점에도 입력 순서대로 서로 다른 순위를 줬는데, LLM 점수는 하루 50건 중 98%가
+    다른 글과 동점이라 임베딩 필터가 뱉은 순서가 랭킹에 그대로 새어들어왔다 —
+    의도한 규칙이 아니라 상류 단계의 우연이었다(2026-09-13, 실측상 Top 20의 하루 평균 0.4자리).
+
     점수가 없는 행(본문을 못 가져와 LLM 채점을 건너뛴 글)은 '낮음'이 아니라 '모름'이므로
-    꼴찌가 아니라 점수 있는 행들의 가운데 순위를 준다 — 감점도 가점도 없이 다른 신호로 정해지게."""
+    꼴찌가 아니라 점수 있는 행들의 가운데 순위를 준다 — 극단적으로 벌주지도 보상하지도 않게."""
     scored = [r for r in rows if key in (r.scores or {})]
     ordered = sorted(scored, key=lambda r: r.scores[key], reverse=True)
-    ranks: dict[uuid.UUID, float] = {row.id: i + 1 for i, row in enumerate(ordered)}
+
+    ranks: dict[uuid.UUID, float] = {}
+    start = 0
+    while start < len(ordered):
+        end = start
+        while end + 1 < len(ordered) and ordered[end + 1].scores[key] == ordered[start].scores[key]:
+            end += 1
+        shared = (start + end) / 2 + 1  # 동점 구간이 나눠 갖는 평균 순위
+        for row in ordered[start : end + 1]:
+            ranks[row.id] = shared
+        start = end + 1
+
     middle = (len(ordered) + 1) / 2
     for row in rows:
         ranks.setdefault(row.id, middle)

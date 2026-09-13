@@ -95,6 +95,22 @@ def run() -> None:
         raise
 
 
+def alert_reason(failures: list[dict], collector_count: int) -> str | None:
+    """실행은 끝났지만 메일로 알려야 할 실패인지 판단한다.
+
+    수집기 하나가 한 번 실패하는 건(arXiv 429 등) 흔하고 다이제스트도 정상적으로 나간다 —
+    그때마다 알리면 "괜찮습니다" 메일이 쌓여 정작 중요한 알림까지 안 읽게 된다(최근 14회 중
+    2회가 이런 실패였다). 수집 외 단계의 실패나 수집기 전멸은 다이제스트 내용이 실제로
+    망가지는 경우라 알린다. 소스 하나가 며칠째 죽어 있는 건 check_digest.py가 따로 본다."""
+    others = [f for f in failures if f.get("stage") != "collect"]
+    collect = [f for f in failures if f.get("stage") == "collect"]
+    if others:
+        return "\n".join(f"[{f.get('stage')}] {f.get('error', '')[:300]}" for f in others)
+    if collect and len(collect) >= collector_count:
+        return "모든 수집기가 실패했습니다: " + ", ".join(str(f.get("source")) for f in collect)
+    return None
+
+
 def _run_stages(session: Session, run: PipelineRun, run_date: date) -> None:
     sources_cfg = get_sources_config()
     failures: list[dict] = []
@@ -197,6 +213,13 @@ def _run_stages(session: Session, run: PipelineRun, run_date: date) -> None:
         },
     )
     logger.info("pipeline finished: status=%s failures=%s", status, failures)
+
+    reason = alert_reason(failures, len(COLLECTOR_FACTORIES))
+    if reason:
+        send_alert(
+            f"[Tech Radar] 실행은 끝났지만 실패가 있었습니다 — {run_date.isoformat()}",
+            f"{reason}\n\n다이제스트는 그때까지의 결과로 발송됐습니다. 로그: tail -80 /var/log/tech-radar.log\n",
+        )
 
 
 if __name__ == "__main__":

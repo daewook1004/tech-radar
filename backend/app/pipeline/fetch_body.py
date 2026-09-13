@@ -124,7 +124,10 @@ def extract_body(html: str) -> str:
     parser.close()
     candidates = [" ".join(parser.citation_abstract.split()), "\n".join(parser.root_blocks), "\n".join(parser.paragraphs)]
     body = next((c for c in candidates if len(c) >= MIN_BODY_CHARS), "")
-    return body[:MAX_BODY_CHARS]
+    # PostgreSQL의 text 컬럼은 NUL(0x00)을 거부한다. 바이너리가 섞인 페이지 한 건이
+    # 저장 단계에서 그 실행의 본문 전체를 날리고 파이프라인을 멈춰 세웠다
+    # (2026-09-12·13 다이제스트 미발송). 뽑아낸 본문에서 바로 지운다.
+    return body.replace("\x00", "")[:MAX_BODY_CHARS]
 
 
 def _fetch(url: str) -> str:
@@ -141,7 +144,10 @@ def _fetch(url: str) -> str:
                     break
             # charset이 헤더에 없으면 requests가 ISO-8859-1로 가정해 한글이 깨진다
             charset = resp.encoding if "charset=" in content_type.lower() else "utf-8"
-        return extract_body(bytes(raw).decode(charset or "utf-8", errors="replace"))
+        html = bytes(raw).decode(charset or "utf-8", errors="replace")
+        if "\x00" in html:  # 어느 사이트가 이러는지 알아두려고 남긴다 — 제거는 extract_body가 한다
+            logger.info("page has %d NUL bytes: %s", html.count("\x00"), url)
+        return extract_body(html)
     except Exception as e:  # 원문 하나가 실패해도 파이프라인은 계속 — 그 글은 '모름'으로 처리된다
         logger.info("body fetch failed for %s: %s", url, e)
         return ""

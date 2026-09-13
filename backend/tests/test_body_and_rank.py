@@ -53,6 +53,14 @@ def test_extract_body_ignores_lists_outside_the_content_area():
     assert body.count("Agents are moving") == 2
 
 
+def test_extract_body_strips_nul_bytes():
+    # PostgreSQL text 컬럼이 NUL을 거부해서 저장 단계에서 실행 전체가 죽었다(2026-09-12·13)
+    html = f"<article><p>{PARA}\x00{PARA}</p></article>"
+    body = extract_body(html)
+    assert "\x00" not in body
+    assert body.count("Agents are moving") == 2
+
+
 def test_extract_body_gives_up_on_script_only_pages():
     html = "<html><body><div id='root'></div><p>Kakao brings tomorrow's technology into your life</p></body></html>"
     assert extract_body(html) == ""

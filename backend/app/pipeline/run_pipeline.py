@@ -99,9 +99,18 @@ def run() -> None:
     passed_rows = embed_filter(session, content_rows)
     logger.info("passed embed filter: %d/%d items", len(passed_rows), len(content_rows))
 
-    bodies_filled, bodies_missing = fill_missing_bodies(session, passed_rows)
-    logger.info("filled %d empty bodies from the original pages; %d still have none and skip LLM scoring",
-                bodies_filled, bodies_missing)
+    try:
+        bodies_filled, bodies_missing = fill_missing_bodies(session, passed_rows)
+        logger.info("filled %d empty bodies from the original pages; %d still have none and skip LLM scoring",
+                    bodies_filled, bodies_missing)
+    except Exception as e:
+        # 본문 보강은 있으면 좋은 단계지 다이제스트의 조건이 아니다. 여기서 예외가 나면
+        # 그날 메일이 통째로 안 나간다 — NUL 바이트 한 건에 이틀치를 날려먹고 넣었다
+        # (2026-09-12·13). 실패로 기록만 하고 원래 본문 그대로 채점을 이어간다.
+        session.rollback()
+        logger.exception("body fetch step failed; continuing with the bodies we already had")
+        failures.append({"stage": "fetch_body", "source": None, "error": str(e)})
+        bodies_filled, bodies_missing = 0, 0
 
     status = "success"
     try:

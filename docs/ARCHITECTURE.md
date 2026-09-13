@@ -364,6 +364,8 @@ run_pipeline.py
 
 **6단계(llm_score)와 9단계(rank_and_cutoff)는 같은 `rrf_scores()` 함수를 재사용한다** — 처음엔 6.5단계가 `relevance*10+importance+novelty` 식의 별도 손튜닝 공식을 썼는데, 9단계와 똑같은 스케일 불일치 문제로 relevance 높은 콘텐츠(예: 기업 블로그)가 정밀분석 대상에도 못 드는 게 실측으로 확인돼 2026-08-27 통일함(§6.5 참조).
 
+5.5단계는 본문을 채우다 실패해도 롤백하고 원래 본문 그대로 6단계로 넘어간다 — 있으면 좋은 단계가 다이제스트 발송을 막으면 안 된다(2026-09-12·13에 NUL 바이트가 섞인 페이지 한 건으로 이틀치를 놓쳤다).
+
 각 단계는 **소스/항목 단위로 실패를 격리**하고 `pipeline_run.failures`에 기록한다. 6~8단계에서 매 LLM 호출 전 `cost_ledger` 합계를 확인해 예산 초과 시 파이프라인을 중단하고 그때까지의 결과로 발송한다(§9). `retention_days`(90일 삭제)는 설정값만 있고 실제 삭제 로직은 아직 구현 안 됨(§11).
 
 ---
@@ -442,8 +444,17 @@ services:
     # Caddy가 TLS + Basic Auth 처리
 ```
 
-- 파이프라인 실행은 호스트 cron이 `docker compose run --rm backend python -m app.pipeline.run_pipeline` 형태로 트리거 (웹 서비스 컨테이너와 별개의 1회성 실행 — §1 원칙과 일치).
+- 파이프라인 실행은 호스트 cron이 `docker compose run --rm backend python -m app.pipeline.run_pipeline` 형태로 트리거 (웹 서비스 컨테이너와 별개의 1회성 실행 — §1 원칙과 일치). 22:00 UTC = 07:00 KST.
 - `postgres` 볼륨만 영속화하면 되므로 백업 대상이 단순함.
+
+**실패 알림 (2026-09-13 추가)** — 파이프라인이 조용히 죽으면 "오늘 메일이 안 왔네" 말고는 알 방법이 없어서 이틀치를 놓친 뒤 넣었다. 두 겹이다.
+
+| | 무엇을 잡나 | 어떻게 |
+|---|---|---|
+| `run_pipeline.run()`의 crash 처리 | 파이프라인이 돌다가 죽은 경우 | `pipeline_run`을 `failed`로 닫고 traceback을 메일로 보낸 뒤 예외를 다시 던짐 |
+| `check_digest.py` (cron `30 23 * * *` UTC = 08:30 KST) | 파이프라인이 **아예 안 돈** 경우(cron 정지, 컨테이너 기동 실패, 서버 다운)와 메일 발송 실패 | 그날 `digest` 행이 없거나 `email_status != 'sent'`면 메일로 알림 |
+
+알림도 다이제스트와 같은 Gmail SMTP(`deliver.default_sender()`)를 쓴다 — 받는 사람이 한 명이라 이미 매일 보는 편지함이 가장 확실한 도착지다. 알림 발송 자체가 실패하면 로그만 남기고 삼킨다(`alert.send_alert`).
 
 ---
 

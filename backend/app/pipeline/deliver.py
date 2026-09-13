@@ -94,7 +94,8 @@ class GmailSMTPSender(NotificationSender):
             smtp.send_message(msg)
 
 
-def _default_sender() -> NotificationSender:
+def default_sender() -> NotificationSender:
+    """다이제스트와 실패 알림(alert.py)이 같은 경로를 쓴다."""
     from app.config import get_settings
 
     settings = get_settings()
@@ -119,7 +120,7 @@ def deliver(
     all_items: list[ContentRow] | None = None,
     sender: NotificationSender | None = None,
 ) -> Digest:
-    sender = sender or _default_sender()
+    sender = sender or default_sender()
     text = render_digest_text(run_date, trend_summary, items, all_items)
 
     out_path = _save_to_file(run_date, text)

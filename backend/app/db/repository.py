@@ -104,13 +104,17 @@ def get_recent_digest_content_ids(session: Session, run_date: date, days: int = 
     return set(session.scalars(stmt).all())
 
 
+def get_digest(session: Session, run_date: date) -> Digest | None:
+    return session.scalar(select(Digest).where(Digest.run_date == run_date))
+
+
 def save_digest(
     session: Session,
     run_date: date,
     trend_summary: str,
     items: list[tuple[ContentRow, float, bool]],
 ) -> Digest:
-    digest = session.scalar(select(Digest).where(Digest.run_date == run_date))
+    digest = get_digest(session, run_date)
     if digest:
         session.execute(delete(DigestItem).where(DigestItem.digest_id == digest.id))
         digest.generated_at = datetime.utcnow()
@@ -142,7 +146,7 @@ def list_digests(session: Session) -> list[Digest]:
 def get_digest_detail(
     session: Session, run_date: date
 ) -> tuple[Digest, list[tuple[DigestItem, ContentRow]]] | None:
-    digest = session.scalar(select(Digest).where(Digest.run_date == run_date))
+    digest = get_digest(session, run_date)
     if digest is None:
         return None
 

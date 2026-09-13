@@ -1,6 +1,7 @@
 import logging
 import sys
-from datetime import datetime, timedelta, timezone
+import traceback
+from datetime import date, datetime, timedelta, timezone
 
 try:
     import resource  # 리눅스 전용 — 로컬(Windows) 개발 환경에는 없어서 피크 메모리 기록을 건너뛴다
@@ -8,6 +9,7 @@ except ImportError:
     resource = None
 
 import openai
+from sqlalchemy.orm import Session
 
 # 서버(컨테이너)는 UTC로 도는데 cron은 한국 시간 아침 배송에 맞춰 22:00 UTC(=KST 07:00,
 # 다음날)에 실행된다. date.today()를 그대로 쓰면 서버 시계가 아직 "어제"라 다이제스트
@@ -26,8 +28,10 @@ from app.collectors.hackernews import HackerNewsCollector
 from app.collectors.rss import RSSCollector
 from app.config import get_settings, get_sources_config
 from app.db import repository
+from app.db.models import PipelineRun
 from app.db.session import get_session
 from app.llm import client as llm_client
+from app.pipeline.alert import send_alert
 from app.pipeline.dedup import dedup
 from app.pipeline.deliver import deliver
 from app.pipeline.embed_filter import embed_filter
@@ -67,10 +71,31 @@ LEFTOVER_MAX_AGE = timedelta(days=3)
 
 
 def run() -> None:
+    """단계 실행은 _run_stages가 하고, 여기서는 실패를 붙잡아 메일로 알린다.
+    조용히 죽으면 "오늘 메일이 안 왔네" 말고는 알 방법이 없다 — 2026-09-12·13 이틀치를
+    그렇게 놓쳤다. 시작조차 못 한 경우(cron·컨테이너·서버)는 여기서 알 수 없어서
+    check_digest.py가 따로 확인한다."""
     run_date = datetime.now(_KST).date()
     session = get_session()
     run = repository.start_pipeline_run(session, run_date)
+    try:
+        _run_stages(session, run, run_date)
+    except Exception as e:
+        logger.exception("pipeline crashed")
+        session.rollback()  # 실패한 트랜잭션 위에서는 아래 기록도 남길 수 없다
+        run.failures = [{"stage": "crash", "source": None, "error": f"{type(e).__name__}: {e}"}]
+        repository.finish_pipeline_run(session, run, "failed", {})
+        send_alert(
+            f"[Tech Radar] 파이프라인 실패 — {run_date.isoformat()}",
+            f"오늘 다이제스트를 만들지 못했습니다.\n\n{traceback.format_exc()}\n"
+            "서버에서 확인:\n"
+            "  tail -80 /var/log/tech-radar.log\n"
+            "  cd /opt/tech-radar && docker compose run --rm backend python -m app.pipeline.run_pipeline\n",
+        )
+        raise
 
+
+def _run_stages(session: Session, run: PipelineRun, run_date: date) -> None:
     sources_cfg = get_sources_config()
     failures: list[dict] = []
     collected = []

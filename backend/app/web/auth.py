@@ -10,7 +10,7 @@ _security = HTTPBasic(auto_error=False)
 
 def require_basic_auth(credentials: HTTPBasicCredentials | None = Depends(_security)) -> None:
     """basic_auth_user/password가 둘 다 설정된 경우에만 인증을 요구한다.
-    비어있으면(로컬 개발 기본값) 통과 — deliver.py의 _default_sender()와 같은 폴백 패턴."""
+    비어있으면(로컬 개발 기본값) 통과 — deliver.py의 default_sender()와 같은 폴백 패턴."""
     settings = get_settings()
     if not settings.basic_auth_user or not settings.basic_auth_password:
         return

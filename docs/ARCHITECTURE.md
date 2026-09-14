@@ -450,7 +450,8 @@ services:
 ```
 
 - 파이프라인 실행은 호스트 cron이 `docker compose run --rm backend python -m app.pipeline.run_pipeline` 형태로 트리거 (웹 서비스 컨테이너와 별개의 1회성 실행 — §1 원칙과 일치). 22:00 UTC = 07:00 KST.
-- `postgres` 볼륨만 영속화하면 되므로 백업 대상이 단순함.
+- `postgres` 볼륨만 영속화하면 되므로 백업 대상이 단순함. 2026-09-14부터 호스트 cron `0 23 * * *` UTC(=08:00 KST)이 `/opt/tech-radar/scripts-backup-db.sh`를 돌려 `pg_dump | gzip`을 `/opt/tech-radar-backups/`에 7일치 보관한다(저장소가 git clone이라 그 밖에 둔다). 인스턴스가 통째로 사라지면 이 파일도 사라지므로, 진짜 재해 대비는 주기적으로 밖으로 내려받는 것까지다.
+- 대시보드 Basic Auth는 2026-09-14부터 켜져 있다(`.env`의 `BASIC_AUTH_USER`/`BASIC_AUTH_PASSWORD`). 값이 비면 통과하는 폴백이라 그동안 `/digests`가 공개 상태였다. `/health`는 모니터링용이라 인증 없이 열어 둔다.
 
 **실패 알림 (2026-09-13 추가)** — 파이프라인이 조용히 죽으면 "오늘 메일이 안 왔네" 말고는 알 방법이 없어서 이틀치를 놓친 뒤 넣었다. 두 겹이다.
 

@@ -111,6 +111,9 @@ class Content(BaseModel):
     author: Optional[str] = None
     title: str
     text: str                            # 본문 또는 발췌(arXiv는 초록만 — 비용 절감)
+                                         # arXiv 수집은 2026-09-14부터 검색 API가 아니라 카테고리 RSS —
+                                         # API가 어느 IP에서든 429 "Rate exceeded."를 돌려준다. 키워드
+                                         # 필터는 코드에서 걸고, 카테고리별로 번갈아 뽑아 50건으로 자른다.
     url: str
     published_at: Optional[datetime] = None
     collected_at: datetime
@@ -301,7 +304,7 @@ github:
     min_stars: 50
 
 arxiv:
-  categories: ["cs.CL", "cs.LG", "cs.AI", "cs.MA"]
+  categories: ["cs.CL", "cs.LG", "cs.AI", "cs.MA"]   # 카테고리별 RSS를 각각 받아 합친다
   keywords: ["retrieval augmented generation", "agent", "fine-tuning", "evaluation"]
 
 rss_blogs:

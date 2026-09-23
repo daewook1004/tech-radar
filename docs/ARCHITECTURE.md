@@ -56,8 +56,8 @@ tech-radar/
 │           ├── normalize.py
 │           ├── dedup.py
 │           ├── embed_filter.py
-│           ├── llm_score.py           # gpt-5.6-luna
-│           ├── llm_analyze.py         # gpt-5.6-sol
+│           ├── llm_score.py           # gpt-6-luna
+│           ├── llm_analyze.py         # gpt-6-sol
 │           ├── trend_summary.py
 │           ├── rank.py                # 컷오프 + 다양성 보장
 │           └── deliver.py             # 이메일 발송 + digest 영속화
@@ -357,10 +357,10 @@ run_pipeline.py
   ├─ 4. persist             — content 테이블에 upsert(ON CONFLICT DO NOTHING RETURNING) — 새로 들어온 행만 다음 단계로. 이전 실행이 저장만 하고 끝내지 못한 행(status='collected', 3일 이내)도 이어받음
   ├─ 5. embed_filter        — 관심사 카테고리 임베딩 대비 cosine similarity로 Relevance 계산, 상위 50건만 통과
   ├─ 5.5 fill_bodies        — 통과한 글 중 본문 1000자 미만(HN 링크 글, 제목·짧은 요약만 주는 피드)은 원문 링크에서 본문을 가져와 채움. 그래도 200자 미만이면 LLM 채점·정밀분석을 건너뛰고 LLM 신호는 가운데 순위('모름')로 둠
-  ├─ 6. llm_score           — gpt-5.6-luna: Importance/Novelty/Credibility (필터 통과 후보 전체)
+  ├─ 6. llm_score           — gpt-6-luna: Importance/Novelty/Credibility (필터 통과 후보 전체)
   ├─ 6.5 정밀분석 대상 선정  — rrf_scores()로 통과 후보 전체를 재랭킹, 상위 20건만 다음 단계로
-  ├─ 7. llm_analyze         — gpt-5.6-sol: 20건만 요약 + 추천 이유 (구조화 출력)
-  ├─ 8. trend_summary       — gpt-5.6-sol: 필터 통과 후보군 전체(~50건) 대상 "오늘의 주요 흐름" 1회 호출
+  ├─ 7. llm_analyze         — gpt-6-sol: 20건만 요약 + 추천 이유 (구조화 출력)
+  ├─ 8. trend_summary       — gpt-6-sol: 필터 통과 후보군 전체(~50건) 대상 "오늘의 주요 흐름" 1회 호출
   ├─ 9. rank_and_cutoff     — 어제 노출 항목(digest_item) 제외 → rrf_scores() 재적용 → 소스당 최대 4개 cap → High 카테고리 0개면 1개 강제 포함 → 최종 10개
   └─ 10. deliver             — digest/digest_item 영속화 + Gmail 발송(콘솔 폴백) + output/{date}.txt 저장 (MUST READ + 트렌드 요약 + 오늘 수집 전체 목록)
 ```
@@ -385,9 +385,9 @@ run_pipeline.py
 
 | 단계 | 모델 | 입력 | 출력 (구조화) |
 |---|---|---|---|
-| llm_score | gpt-5.6-luna | title, text 발췌, source, tags | `{importance: 1-10, novelty: 1-10, credibility: 1-10, reason: str}` |
-| llm_analyze | gpt-5.6-sol | 위 정보 + relevance + 관심사 프로필 | `{summary: str, why_important: str, topic: str, keywords: [str], content_type: str}` |
-| trend_summary | gpt-5.6-sol (1일 1회) | 필터 통과 후보 전체의 title+tags 목록 | 3~5줄 텍스트 (`response.output_text`) |
+| llm_score | gpt-6-luna | title, text 발췌, source, tags | `{importance: 1-10, novelty: 1-10, credibility: 1-10, reason: str}` |
+| llm_analyze | gpt-6-sol | 위 정보 + relevance + 관심사 프로필 | `{summary: str, why_important: str, topic: str, keywords: [str], content_type: str}` |
+| trend_summary | gpt-6-sol (1일 1회) | 필터 통과 후보 전체의 title+tags 목록 | 3~5줄 텍스트 (`response.output_text`) |
 
 ### 7.3 랭킹 방법론: Weighted Reciprocal Rank Fusion (2026-08-27 도입)
 
@@ -407,7 +407,9 @@ weights = {relevance: 5, importance: 1, novelty: 1, credibility: 1}
 
 `rank.rrf_scores()`는 **두 곳에서 재사용**된다: ①정밀분석(top 20) 선정 단계, ②최종 랭킹(rank_and_cutoff) 단계. 같은 스케일 불일치 문제가 ①에서도 발생해 relevance 높은 콘텐츠(기업 블로그 등)가 정밀분석 대상에도 못 드는 걸 확인해 통일함.
 
-gpt-5.6-luna는 OpenAI 공식 모델 카탈로그에서 "cost-sensitive, high-volume workloads" 전용으로 포지셔닝된 모델이라 1차 스코어링에 적합. gpt-5.6-sol(=gpt-5.6, 최상위 플래그십)은 2차 분석 볼륨이 하루 5~10건뿐이라 중간 티어(gpt-5.6-terra)와 비용 차이가 미미해, 품질을 우선해 선택(사용자 확정).
+1차는 공식 카탈로그에서 "most efficient model for focused, high-volume tasks"로 포지셔닝된 저가 모델(luna), 2차는 볼륨이 하루 5~10건뿐이라 품질을 우선해 플래그십(sol)을 쓴다(사용자 확정).
+
+**2026-09-23: gpt-5.6 계열 → gpt-6 계열로 교체**(같은 날 배포, 첫 적용은 2026-09-24 07:00 KST 다이제스트 — 이 날짜가 전후 비교의 경계다). `gpt-5.6-luna`→`gpt-6-luna`, `gpt-5.6-sol`→`gpt-6-sol`(llm_score / llm_analyze / trend_summary). 같은 등급인데 단가가 입력 절반·출력 40~50%라(luna $0.20/$1.20 → $0.10/$0.50, sol $4/$20 → $2/$10) LLM 비용이 대략 반으로 준다. 최상위 `gpt-6-astra`($10/$50)는 2차 볼륨에서도 단가가 5배라 쓰지 않는다. 주의: 블로그 2·3편의 측정값(본문 제거 시 중요도 −1.75 등)과 평가셋 300건 라벨은 모두 `gpt-5.6-luna`로 잰 것이다. 3편에서 확인한 대로 낙폭 크기는 모델마다 다르므로, gpt-6-luna에서도 같은 편향이 같은 크기로 남아 있는지는 다시 재봐야 한다.
 
 출력은 `output_config.format`(구조화 출력)으로 스키마를 강제해 파싱 에러를 방지한다. 모든 출력은 한국어로 통일(PRD §5.4).
 

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.db.models import Content as ContentRow
 from app.llm import client as llm_client
 
-MODEL = "gpt-5.6-sol"
+MODEL = "gpt-6-sol"
 
 SYSTEM_PROMPT = (
     "너는 오늘 수집된 AI/개발 기술 뉴스 후보군 전체를 훑어보고, "

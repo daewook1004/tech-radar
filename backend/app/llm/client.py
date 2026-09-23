@@ -8,9 +8,14 @@ from sqlalchemy.orm import Session
 from app.config import get_pipeline_settings
 from app.db.models import CostLedger
 
-# OpenAI 공식 가격 페이지(developers.openai.com/api/docs/pricing) 2026-08-26 확인 기준, USD per token.
-# gpt-5.6 계열(sol/terra/luna)이 현재 모델 카탈로그의 플래그십 — PRD §5.4 참조.
+# OpenAI 공식 가격 페이지(developers.openai.com/api/docs/pricing) 2026-09-23 확인 기준, USD per token.
+# gpt-6 계열(astra/sol/luna)이 현재 카탈로그의 최신 세대 — 2026-09-23에 5.6에서 갈아탔다.
+# 같은 등급인데 단가가 절반이라(luna 출력은 40%) 바꿀 이유가 비용만으로도 충분했다.
+# 5.6 가격을 남겨두는 건 cost_ledger에 이미 쌓인 행들과 롤백 때문 — _cost_usd는 기록 시점에만
+# 불리므로 과거 행이 다시 계산되지는 않지만, 되돌릴 때 이 표를 다시 찾지 않으려고 둔다.
 _PRICING = {
+    "gpt-6-luna": {"input": Decimal("0.10"), "output": Decimal("0.50")},
+    "gpt-6-sol": {"input": Decimal("2.00"), "output": Decimal("10.00")},
     "gpt-5.6-luna": {"input": Decimal("0.20"), "output": Decimal("1.20")},
     "gpt-5.6-sol": {"input": Decimal("4.00"), "output": Decimal("20.00")},  # 2026-11-21까지 프로모션가(원가 $5/$30)
 }

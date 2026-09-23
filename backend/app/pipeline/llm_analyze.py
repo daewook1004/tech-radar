@@ -9,7 +9,8 @@ from app.db.models import Content as ContentRow
 from app.llm import client as llm_client
 from app.pipeline.fetch_body import has_body
 
-MODEL = "gpt-5.6-sol"  # 최상위 플래그십 — 하루 5~10건뿐이라 비용보다 품질 우선(사용자 확정)
+MODEL = "gpt-6-sol"  # 하루 5~10건뿐이라 비용보다 품질 우선(사용자 확정).
+# 더 위에 gpt-6-astra가 있지만 단가가 5배라 이 볼륨에서도 체감돼서 sol에 둔다.
 
 _NO_BODY_SUMMARY = "원문 본문을 가져오지 못해 요약하지 않았습니다. 링크에서 직접 확인해주세요."
 
@@ -37,7 +38,7 @@ class AnalysisOutput(BaseModel):
 
 
 def analyze_items(session: Session, rows: list[ContentRow], run_date: date) -> list[ContentRow]:
-    """PRD §5.4 2차(gpt-5.6-sol) — 상위 후보만 정밀 요약 + 추천 이유."""
+    """PRD §5.4 2차(gpt-6-sol) — 상위 후보만 정밀 요약 + 추천 이유."""
     client = OpenAI()
     for row in rows:
         if not has_body(row):

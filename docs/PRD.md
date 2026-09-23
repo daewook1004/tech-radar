@@ -103,8 +103,8 @@ Source (Threads/GitHub/GeekNews/HN/arXiv/RSS)
 - 임베딩 모델은 로컬 오픈소스 모델 사용을 권장 (비용 $0, 별도 의존성 최소화). 매니지드 API(Voyage 등) 사용 시에도 이 볼륨에서는 비용 무시할 수준.
 
 ### 5.4 LLM 분석 (OpenAI만 사용, 2단계 — 2026-08-26 Claude에서 전환)
-- **1차 (gpt-5.6-luna)**: 1차 필터 통과 후보(30~80건/일)에 대해 Importance, Novelty, Credibility 스코어링. 공식 문서상 "cost-sensitive, high-volume workloads" 전용 모델.
-- **2차 (gpt-5.6-sol)**: 상위 후보(5~10건)만 정밀 요약 + 추천 이유 생성. 볼륨이 작아 비용 차이가 미미하므로 중간 티어(terra) 대신 최상위 플래그십 선택(사용자 확정).
+- **1차 (gpt-6-luna)**: 1차 필터 통과 후보(30~80건/일)에 대해 Importance, Novelty, Credibility 스코어링. 공식 문서상 "most efficient model for focused, high-volume tasks". (2026-09-23에 gpt-5.6-luna에서 교체)
+- **2차 (gpt-6-sol)**: 상위 후보(5~10건)만 정밀 요약 + 추천 이유 생성. 볼륨이 작아 비용 차이가 미미하므로 품질을 우선해 플래그십 선택(사용자 확정). 최상위 gpt-6-astra는 단가가 5배라 제외. (2026-09-23에 gpt-5.6-sol에서 교체)
 - **트렌드 요약 (추가 LLM 호출 1회)**: 1차 필터 통과 후보군 전체를 대상으로 "오늘의 주요 흐름"(3~5줄) 생성.
 - **출력 언어**: 원문이 영어든 한국어든, 요약/분석 결과는 **한국어로 통일**.
 
@@ -198,7 +198,7 @@ PyTorch, Hugging Face, LangChain, LlamaIndex, vLLM, Transformers, Ollama, OpenAI
 | 도메인 (선택) | $0~1/월 |
 | **합계** | **약 $10~23/월** |
 
-세부 근거(2026-08-26 OpenAI 공식 가격 기준): gpt-5.6-luna($0.20/$1.20 per MTok)로 1차 스코어링 40~80건/일 → 월 $0.6~1.1, gpt-5.6-sol($4/$20 per MTok, 2026-11-21까지 프로모션가)로 최종분석 5~10건/일 → 월 $4.3~8.7, 트렌드 요약 1일 1회 → 월 $0.4 내외. 서버비가 LLM비와 비슷하거나 더 큰 비중일 정도로 개인 프로젝트 규모에서 LLM API 비용 자체는 낮은 편.
+세부 근거(2026-09-23 OpenAI 공식 가격 기준): gpt-6-luna($0.10/$0.50 per MTok)로 1차 스코어링 40~80건/일 → 월 $0.3~0.5, gpt-6-sol($2/$10 per MTok)로 최종분석 5~10건/일 → 월 $2.2~4.4, 트렌드 요약 1일 1회 → 월 $0.2 내외. gpt-5.6 계열을 쓰던 2026-08-26 기준으로는 각각 $0.6~1.1 / $4.3~8.7 / $0.4였다 — 모델 세대 교체로 대략 절반이 됐다. 서버비가 LLM비와 비슷하거나 더 큰 비중일 정도로 개인 프로젝트 규모에서 LLM API 비용 자체는 낮은 편.
 
 ---
 
@@ -230,7 +230,7 @@ PyTorch, Hugging Face, LangChain, LlamaIndex, vLLM, Transformers, Ollama, OpenAI
 | Digest 컷오프 | Score 임계치 + 어제 노출 항목 제외 + High 카테고리 최소 1개 다양성 보장 |
 | 수집 주기 | 전체 1일 1회 배치 |
 | 설정 관리 | YAML/JSON 파일 직접 편집 |
-| LLM Provider | OpenAI만 사용 (2026-08-26: Claude → OpenAI로 전환, gpt-5.6-luna/gpt-5.6-sol) |
+| LLM Provider | OpenAI만 사용 (2026-08-26: Claude → OpenAI로 전환 / 2026-09-23: gpt-5.6 → gpt-6 계열, gpt-6-luna/gpt-6-sol) |
 | 배포 환경 | 저가형 VPS 상시 배포 |
 | 트렌드 요약 섹션 | MVP 포함 (간단한 LLM 요약) |
 | 관심사 표현 | 카테고리+가중치 고정 목록 |

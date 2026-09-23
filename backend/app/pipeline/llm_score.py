@@ -8,7 +8,7 @@ from app.db.models import Content as ContentRow
 from app.llm import client as llm_client
 from app.pipeline.fetch_body import has_body
 
-MODEL = "gpt-5.6-luna"  # 공식 문서상 "cost-sensitive, high-volume workloads" 전용 모델
+MODEL = "gpt-6-luna"  # 공식 문서상 "most efficient model for focused, high-volume tasks"
 
 # 순위가 "관련도로만" 정해진다고 쓰지 않는다 — 채점을 건너뛴 글도 rank.py에서 LLM 신호마다
 # 가운데 순위 기여를 받으므로, 채점된 글과 겨룰 때 관련도만으로 결정되지 않는다.
@@ -29,7 +29,7 @@ class ScoreOutput(BaseModel):
 
 
 def score_items(session: Session, rows: list[ContentRow], run_date: date) -> list[ContentRow]:
-    """PRD §5.4 1차(gpt-5.6-luna) — 임베딩 필터를 통과한 후보 전체에 대해 스코어링."""
+    """PRD §5.4 1차(gpt-6-luna) — 임베딩 필터를 통과한 후보 전체에 대해 스코어링."""
     client = OpenAI()
     for row in rows:
         if not has_body(row):

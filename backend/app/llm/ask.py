@@ -33,14 +33,24 @@ PER_GROUP = 10        # 상한 5로 돌리면 모든 묶음이 상한에 닿아 
 BODY_CHARS = 2500
 TITLE_CHARS = 200
 
-_SELECT_SYSTEM = (
-    "너는 개인용 기술 뉴스 아카이브의 사서다. 아래는 수집된 글 목록의 일부다"
-    "(번호·날짜·출처·제목). 사용자의 질문에 답하는 데 실제로 도움이 될 글의 번호만 골라라.\n"
-    f"- 이 묶음에서 최대 {PER_GROUP}건까지\n"
-    "- **이 묶음에 관련 글이 없으면 빈 목록을 돌려라.** 묶음마다 질문과 무관한 시기가 있는 게 정상이다\n"
-    "- 제목만 보고 판단해야 하니, 애매하면 넣는 쪽으로\n"
-    "- 질문이 개념적이면 단어가 겹치지 않아도 내용이 맞을 것 같은 글을 골라라"
-)
+def _select_system(today: date, span: str, full_span: str) -> str:
+    """묶음마다 자기 구간만 보이므로 바깥 맥락을 명시해 준다.
+
+    이게 없으면 "지난주" 같은 기간 질문에서 9월 초 묶음이 자기가 지난주인 줄 알고
+    에이전트 글을 가득 채운다 — 배포 후 첫 질의에서 실제로 그랬다(2026-10-02).
+    전체 범위도 같이 줘야 이 묶음이 어디쯤인지 알 수 있다."""
+    return (
+        "너는 개인용 기술 뉴스 아카이브의 사서다. 사용자의 질문에 답하는 데 실제로 "
+        "도움이 될 글의 번호만 골라라.\n"
+        f"- 오늘은 {today.isoformat()}이다\n"
+        f"- 아카이브 전체 범위는 {full_span}이고, **아래 목록은 그중 {span} 구간만**이다\n"
+        f"- 이 묶음에서 최대 {PER_GROUP}건까지\n"
+        "- **질문이 기간을 한정하는데(예: 지난주, 이번 달) 이 구간이 거기에 안 들어가면 "
+        "빈 목록을 돌려라.** 내용이 비슷해 보여도 기간 밖이면 고르지 마라\n"
+        "- 기간과 무관하게 이 묶음에 관련 글이 없으면 그때도 빈 목록을 돌려라\n"
+        "- 제목만 보고 판단해야 하니, 애매하면 넣는 쪽으로\n"
+        "- 질문이 개념적이면 단어가 겹치지 않아도 내용이 맞을 것 같은 글을 골라라"
+    )
 
 _ANSWER_SYSTEM = (
     "너는 개인용 기술 뉴스 아카이브의 사서다. 아래 글들만 근거로 질문에 한국어로 답해라.\n"
@@ -89,11 +99,17 @@ def ask(session: Session, rows: list, question: str, run_date: date) -> AskResul
         day = r.collected_at.date().isoformat() if r.collected_at else "?"
         return f"{i}\t{day}\t{r.source}\t{(r.title or '')[:TITLE_CHARS]}"
 
+    def day_of(i: int) -> str:
+        return rows[i].collected_at.date().isoformat() if rows[i].collected_at else "?"
+
+    full_span = f"{day_of(0)}~{day_of(len(rows) - 1)}" if rows else "-"
+
     def select(idxs: list[int]) -> tuple[list[int], int, int]:
         catalog = "\n".join(line(i) for i in idxs)
+        span = f"{day_of(idxs[0])}~{day_of(idxs[-1])}"
         res = api.responses.parse(
             model=MODEL,
-            input=[{"role": "system", "content": _SELECT_SYSTEM},
+            input=[{"role": "system", "content": _select_system(run_date, span, full_span)},
                    {"role": "user", "content": f"질문: {question}\n\n목록:\n{catalog}"}],
             text_format=_Picks,
         )

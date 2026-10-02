@@ -62,6 +62,26 @@ def check_budget(session: Session, run_date: date) -> None:
         raise BudgetExceededError(f"월 예산 초과: ${monthly_total} >= ${settings['monthly_max_usd']}")
 
 
+# /ask 질의가 쓴 비용은 이 stage 접두어로 구분해 기록한다 — 파이프라인 예산과 섞이지 않게.
+ASK_STAGE_PREFIX = "ask_"
+
+
+def check_ask_budget(session: Session, run_date: date) -> None:
+    """질의 레이어 전용 가드. 파이프라인의 daily_max_usd와 별도 지갑을 쓴다 —
+    질문을 많이 한 날 다음 날 아침 다이제스트가 거부되면 안 된다."""
+    settings = get_pipeline_settings()["budget"]
+    limit = settings.get("ask_daily_max_usd")
+    if not limit:
+        return
+    spent = session.scalar(
+        select(func.coalesce(func.sum(CostLedger.cost_usd), 0)).where(
+            CostLedger.run_date == run_date, CostLedger.stage.like(f"{ASK_STAGE_PREFIX}%")
+        )
+    )
+    if float(spent) >= limit:
+        raise BudgetExceededError(f"오늘 질의 예산 초과: ${spent} >= ${limit}")
+
+
 def record_cost(
     session: Session, run_date: date, stage: str, model: str, input_tokens: int, output_tokens: int
 ) -> None:

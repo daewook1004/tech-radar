@@ -175,3 +175,20 @@ def get_content_by_date(session: Session, run_date: date) -> list[ContentRow]:
     collected_kst_date = func.date(func.timezone("Asia/Seoul", ContentRow.collected_at))
     stmt = select(ContentRow).where(collected_kst_date == run_date)
     return list(session.scalars(stmt).all())
+
+
+def get_corpus_for_ask(session: Session, body_chars: int) -> list:
+    """/ask 질의용 — 수집한 글 전체를 수집 시각 오름차순으로.
+
+    ORM 객체 대신 필요한 컬럼만, 본문은 SQL에서 잘라서 가져온다. 대시보드 프로세스는
+    평소 30MB도 안 쓰는데 여기서 4,600건을 통째로 올리면 그 균형이 깨진다 —
+    야간 파이프라인(피크 500MB)과 같은 1GB 호스트를 쓰므로 여유를 남겨야 한다."""
+    stmt = select(
+        ContentRow.id,
+        ContentRow.source,
+        ContentRow.title,
+        ContentRow.url,
+        ContentRow.collected_at,
+        func.left(func.coalesce(ContentRow.text, ""), body_chars).label("text"),
+    ).order_by(ContentRow.collected_at)
+    return list(session.execute(stmt).all())

@@ -2,6 +2,18 @@
 {% block title %}Tech Radar — 지난 다이제스트{% endblock %}
 {% block content %}
 <h1>지난 다이제스트</h1>
+
+<form action="/ask" method="get" style="display:flex; gap:0.5rem; margin-bottom:1.5rem;">
+  <input type="text" name="q" placeholder="아카이브에 물어보기 — 수집한 글 전체가 대상입니다"
+         style="flex:1; min-width:0; padding:0.55rem 0.8rem; font-size:0.95rem; font-family:inherit;
+                color:var(--text); background:var(--surface);
+                border:1px solid var(--border); border-radius:8px;">
+  <button type="submit"
+          style="padding:0.55rem 1rem; font-size:0.95rem; font-family:inherit; font-weight:600;
+                 color:#fff; background:var(--accent); border:0; border-radius:8px; cursor:pointer;">
+    묻기
+  </button>
+</form>
 {% if not digests %}
   <p class="muted">아직 생성된 다이제스트가 없습니다.</p>
 {% endif %}

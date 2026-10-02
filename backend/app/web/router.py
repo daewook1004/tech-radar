@@ -1,6 +1,7 @@
 import re
 from datetime import date
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import markdown as _markdown
 from fastapi import APIRouter, Depends, HTTPException
@@ -12,6 +13,8 @@ from sqlalchemy.orm import Session
 
 from app.db import repository
 from app.db.session import get_db
+from app.llm import ask as ask_module
+from app.llm.client import BudgetExceededError, MissingAPIKeyError
 from app.web.auth import require_basic_auth
 
 router = APIRouter(dependencies=[Depends(require_basic_auth)])
@@ -35,6 +38,13 @@ def _strip_markdown(text: str | None) -> str:
         return ""
     lines = [_MD_MARKER_RE.sub("", line.strip()) for line in text.splitlines()]
     return " ".join(line for line in lines if line)
+
+
+def _now_kst() -> date:
+    """파이프라인과 같은 날짜 기준 — cost_ledger가 KST 달력 날짜로 묶여 있다."""
+    from datetime import datetime
+
+    return datetime.now(ZoneInfo("Asia/Seoul")).date()
 
 
 _templates.env.filters["markdown"] = _render_markdown
@@ -78,4 +88,25 @@ def digest_detail(request: Request, run_date: date, session: Session = Depends(g
             "by_source": dict(sorted(by_source.items())),
             "selected_ids": selected_ids,
         },
+    )
+
+
+@router.get("/ask")
+def ask(request: Request, q: str = "", session: Session = Depends(get_db)):
+    """수집한 글 전체에 자연어로 묻는다 — 다이제스트는 관심사 필터를 통과한 하루 10건만
+    보여주지만, 여기서는 걸러진 것까지 전부가 대상이다 (docs/RAG_BLUEPRINT.md)."""
+    question = q.strip()
+    if not question:
+        return _templates.TemplateResponse(request, "ask.html", {"question": "", "result": None})
+
+    # run_date는 파이프라인과 같은 기준(KST 달력 날짜)으로 — 비용 원장이 날짜별로 묶인다
+    rows = repository.get_corpus_for_ask(session, ask_module.BODY_CHARS)
+    try:
+        result = ask_module.ask(session, rows, question, _now_kst())
+    except (BudgetExceededError, MissingAPIKeyError) as exc:
+        return _templates.TemplateResponse(
+            request, "ask.html", {"question": question, "result": None, "error": str(exc)}
+        )
+    return _templates.TemplateResponse(
+        request, "ask.html", {"question": question, "result": result, "corpus_size": len(rows)}
     )

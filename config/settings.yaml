@@ -1,6 +1,9 @@
 budget:
   daily_max_usd: 2.0
   monthly_max_usd: 30.0
+  # /ask 질의는 파이프라인과 지갑을 나눈다 — 질문을 많이 한 날 다음 날 아침
+  # 다이제스트가 BudgetExceededError로 거부되면 안 되므로.
+  ask_daily_max_usd: 0.5
 
 digest:
   # score_threshold / min_items는 RRF 도입(2026-08-26) 이후 미사용 — RRF 점수는

@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Tech Radar — 물어보기{% endblock %}
+{% block content %}
+<h1>아카이브에 물어보기</h1>
+
+<form action="/ask" method="get" style="margin-bottom:1.5rem;">
+  <div style="display:flex; gap:0.5rem;">
+    <input type="text" name="q" value="{{ question }}" autofocus
+           placeholder="예: 지난주에 AI 에이전트 쪽에서 뭐가 나왔어?"
+           style="flex:1; min-width:0; padding:0.6rem 0.8rem; font-size:1rem; font-family:inherit;
+                  color:var(--text); background:var(--surface);
+                  border:1px solid var(--border); border-radius:8px;">
+    <button type="submit"
+            style="padding:0.6rem 1.1rem; font-size:1rem; font-family:inherit; font-weight:600;
+                   color:#fff; background:var(--accent); border:0; border-radius:8px; cursor:pointer;">
+      묻기
+    </button>
+  </div>
+  <p class="muted" style="margin:0.5rem 0 0; font-size:0.85rem;">
+    다이제스트에 실린 10건이 아니라 <strong>수집한 글 전체</strong>가 대상입니다.
+    관심사 필터에서 걸러진 글도 포함됩니다.
+  </p>
+</form>
+
+{% if error %}
+  <div class="card" style="border-color:#a0342f;">
+    <strong>답하지 못했습니다.</strong>
+    <p class="muted">{{ error }}</p>
+  </div>
+{% endif %}
+
+{% if result %}
+  <div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:baseline; gap:1rem; margin-bottom:0.75rem;">
+      <span class="badge">확신도 {{ result.confidence }}</span>
+      <span class="muted" style="font-size:0.8rem;">
+        {{ corpus_size }}건을 훑어 {{ result.picked|length }}건을 보고 {{ result.used|length }}건을 인용
+      </span>
+    </div>
+    {{ result.answer | markdown }}
+  </div>
+
+  {% if result.used %}
+    <h2>답에 인용된 글</h2>
+    {% for row in result.used %}
+      <div class="card">
+        <a href="{{ row.url }}" target="_blank" rel="noopener"><strong>{{ row.title }}</strong></a>
+        <p class="muted" style="font-size:0.85rem;">
+          {{ row.collected_at.date().isoformat() }} · {{ row.source }}
+          {% if not row.text %}· <em>본문 없음(제목만)</em>{% endif %}
+        </p>
+      </div>
+    {% endfor %}
+  {% endif %}
+
+  {% if result.picked|length > result.used|length %}
+    <h2>함께 살펴본 글</h2>
+    <p class="muted" style="font-size:0.85rem; margin-bottom:0.75rem;">
+      관련돼 보여 읽었지만 답에는 인용되지 않은 글입니다. 같은 질문을 다시 물으면 목록이 조금 달라질 수 있습니다.
+    </p>
+    <details class="card">
+      <summary style="cursor:pointer;">{{ result.picked|length - result.used|length }}건 더 보기</summary>
+      <ul style="margin-top:0.6rem;">
+        {% set used_ids = result.used | map(attribute='id') | list %}
+        {% for row in result.picked if row.id not in used_ids %}
+          <li style="margin:0.3rem 0;">
+            <a href="{{ row.url }}" target="_blank" rel="noopener">{{ row.title }}</a>
+            <span class="muted" style="font-size:0.8rem;">· {{ row.collected_at.date().isoformat() }} · {{ row.source }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+    </details>
+  {% endif %}
+
+  <p class="muted" style="font-size:0.8rem; margin-top:1.5rem;">
+    이번 질의 비용 ${{ "%.4f"|format(result.cost_usd) }} · LLM 호출 {{ result.calls }}회
+  </p>
+{% endif %}
+{% endblock %}

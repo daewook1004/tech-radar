@@ -3,7 +3,7 @@
 {% block content %}
 <h1>아카이브에 물어보기</h1>
 
-<form action="/ask" method="get" style="margin-bottom:1.5rem;">
+<form action="/ask" method="get" data-slow style="margin-bottom:1.5rem;">
   <div style="display:flex; gap:0.5rem;">
     <input type="text" name="q" value="{{ question }}" autofocus
            placeholder="예: 지난주에 AI 에이전트 쪽에서 뭐가 나왔어?"
@@ -20,6 +20,7 @@
     다이제스트에 실린 10건이 아니라 <strong>수집한 글 전체</strong>가 대상입니다.
     관심사 필터에서 걸러진 글도 포함됩니다.
   </p>
+  <p class="muted waiting" hidden></p>
 </form>
 
 {% if error %}

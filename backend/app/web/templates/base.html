@@ -75,6 +75,14 @@
   }
   .badge.fail { background: #f3d9d9; color: #a0342f; }
   table { width: 100%; border-collapse: collapse; }
+  .spin {
+    display: inline-block; width: 0.85em; height: 0.85em; vertical-align: -0.1em;
+    border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spin { animation: none; opacity: 0.6; } }
+  .waiting { margin: 0.6rem 0 0; font-size: 0.85rem; }
 </style>
 </head>
 <body>
@@ -84,5 +92,22 @@
 <main>
 {% block content %}{% endblock %}
 </main>
+<script>
+document.addEventListener("submit", function (e) {
+  var form = e.target.closest('form[data-slow]');
+  if (!form) return;
+  var btn = form.querySelector('button[type=submit]');
+  var note = form.querySelector('.waiting');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spin"></span>'; }
+  if (!note) return;
+  var t0 = Date.now();
+  note.hidden = false;
+  note.textContent = '아카이브 전체를 읽는 중입니다 — 보통 30초쯤 걸립니다.';
+  setInterval(function () {
+    var sec = Math.round((Date.now() - t0) / 1000);
+    note.textContent = '아카이브 전체를 읽는 중입니다 (' + sec + '초) — 보통 30초쯤 걸립니다.';
+  }, 1000);
+});
+</script>
 </body>
 </html>

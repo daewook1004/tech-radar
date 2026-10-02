@@ -14,6 +14,7 @@
 """
 from __future__ import annotations
 
+import re
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import date
@@ -77,9 +78,32 @@ class AskResult:
     answer: str
     confidence: str
     picked: list       # 1차가 고른 글 (답에 다 쓰이지는 않는다)
-    used: list         # 답변이 실제로 인용한 글
+    used: list         # 답변이 실제로 인용한 글 — [1]부터 등장 순서대로
     cost_usd: float
     calls: int
+
+
+_CITE_RE = re.compile(r"\[(\d+)\]")
+
+
+def _renumber_citations(answer: str, rows: list) -> tuple[str, list]:
+    """답변 속 [코퍼스 번호]를 등장 순서대로 [1][2][3]…으로 바꾸고, 그 순서의 글 목록을 돌려준다.
+
+    모델에게는 코퍼스 인덱스로 인용하게 하는 게 정확하지만(번호가 곧 자료의 주소),
+    읽는 사람에게 [3568]은 아무 의미가 없다. 화면에서는 번호를 다시 매겨 링크를 건다."""
+    seen: dict[int, int] = {}
+    cited: list = []
+
+    def swap(m: re.Match) -> str:
+        idx = int(m.group(1))
+        if not 0 <= idx < len(rows):
+            return ""          # 모델이 없는 번호를 적었으면 조용히 지운다
+        if idx not in seen:
+            seen[idx] = len(cited) + 1
+            cited.append(rows[idx])
+        return f"[{seen[idx]}]"
+
+    return _CITE_RE.sub(swap, answer), cited
 
 
 def _chunks(rows: list) -> list[list[int]]:
@@ -151,13 +175,14 @@ def ask(session: Session, rows: list, question: str, run_date: date) -> AskResul
     total_cost += float(llm_client._cost_usd(MODEL, res.usage.input_tokens, res.usage.output_tokens))
 
     out = res.output_parsed
-    used_idx = [i for i in out.used if 0 <= i < len(rows)]
+    # used 필드보다 본문에 실제로 달린 [번호]를 신뢰한다 — 둘이 어긋날 때가 있다
+    answer, cited = _renumber_citations(out.answer, rows)
     return AskResult(
         question=question,
-        answer=out.answer,
+        answer=answer,
         confidence=out.confidence,
         picked=[rows[i] for i in picked_idx],
-        used=[rows[i] for i in used_idx],
+        used=cited,
         cost_usd=total_cost,
         calls=calls,
     )

@@ -83,6 +83,9 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) { .spin { animation: none; opacity: 0.6; } }
   .waiting { margin: 0.6rem 0 0; font-size: 0.85rem; }
+  a.cite { font-size: 0.85em; font-weight: 600; text-decoration: none;
+           padding: 0 0.1em; white-space: nowrap; }
+  a.cite:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -93,20 +96,44 @@
 {% block content %}{% endblock %}
 </main>
 <script>
+// 질의는 30초쯤 걸린다. 폼을 그냥 제출하면 브라우저가 즉시 이동을 시작해서
+// 화면 갱신이 그려지기 전에 멈춘다 — 주소창 탭만 돌고 페이지는 그대로다.
+// 그래서 이동을 막고, 대기 화면을 그린 뒤, 다음 프레임에 직접 이동시킨다.
 document.addEventListener("submit", function (e) {
   var form = e.target.closest('form[data-slow]');
   if (!form) return;
-  var btn = form.querySelector('button[type=submit]');
-  var note = form.querySelector('.waiting');
-  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spin"></span>'; }
-  if (!note) return;
-  var t0 = Date.now();
-  note.hidden = false;
-  note.textContent = '아카이브 전체를 읽는 중입니다 — 보통 30초쯤 걸립니다.';
-  setInterval(function () {
-    var sec = Math.round((Date.now() - t0) / 1000);
-    note.textContent = '아카이브 전체를 읽는 중입니다 (' + sec + '초) — 보통 30초쯤 걸립니다.';
-  }, 1000);
+  var input = form.querySelector('input[name=q]');
+  var q = input ? input.value.trim() : "";
+  if (!q) return;
+  e.preventDefault();
+
+  var main = document.querySelector('main');
+  if (main) {
+    main.innerHTML =
+      '<h1>아카이브에 물어보기</h1>' +
+      '<div class="card">' +
+        '<p><strong>' + q.replace(/[<>&]/g, function (c) {
+          return { '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c];
+        }) + '</strong></p>' +
+        '<p class="muted"><span class="spin"></span> ' +
+        '<span id="ask-elapsed">아카이브 전체를 읽는 중입니다</span></p>' +
+        '<p class="muted" style="font-size:0.85rem;">' +
+        '제목 4,600여 건을 열 묶음으로 나눠 훑은 뒤, 고른 글의 본문을 읽습니다. ' +
+        '보통 30초쯤 걸립니다.</p>' +
+      '</div>';
+    var el = document.getElementById('ask-elapsed');
+    var t0 = Date.now();
+    setInterval(function () {
+      var sec = Math.round((Date.now() - t0) / 1000);
+      el.textContent = '아카이브 전체를 읽는 중입니다 (' + sec + '초)';
+    }, 1000);
+  }
+  // 두 프레임을 기다려 위 화면이 실제로 그려진 뒤에 이동한다
+  requestAnimationFrame(function () {
+    requestAnimationFrame(function () {
+      window.location.href = '/ask?q=' + encodeURIComponent(q);
+    });
+  });
 });
 </script>
 </body>

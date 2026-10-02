@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.requests import Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
-from markupsafe import Markup
+from markupsafe import Markup, escape
 from sqlalchemy.orm import Session
 
 from app.db import repository
@@ -40,6 +40,23 @@ def _strip_markdown(text: str | None) -> str:
     return " ".join(line for line in lines if line)
 
 
+def _cite_links(text: str, cited: list) -> str:
+    """답변 속 [1][2]를 원문으로 가는 링크로 바꾼다. 번호만 떠 있으면 클릭할 데가 없다."""
+    if not text:
+        return ""
+
+    def swap(m):
+        n = int(m.group(1))
+        if not 1 <= n <= len(cited):
+            return m.group(0)
+        row = cited[n - 1]
+        title = escape(row.title or "")
+        return (f'<a href="{escape(row.url or "#")}" target="_blank" rel="noopener" '
+                f'title="{title}" class="cite">[{n}]</a>')
+
+    return re.sub(r"\[(\d+)\]", swap, text)
+
+
 def _now_kst() -> date:
     """파이프라인과 같은 날짜 기준 — cost_ledger가 KST 달력 날짜로 묶여 있다."""
     from datetime import datetime
@@ -47,6 +64,7 @@ def _now_kst() -> date:
     return datetime.now(ZoneInfo("Asia/Seoul")).date()
 
 
+_templates.env.filters["cite_links"] = _cite_links
 _templates.env.filters["markdown"] = _render_markdown
 _templates.env.filters["strip_markdown"] = _strip_markdown
 

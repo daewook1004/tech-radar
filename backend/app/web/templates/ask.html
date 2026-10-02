@@ -38,14 +38,15 @@
         {{ corpus_size }}건을 훑어 {{ result.picked|length }}건을 보고 {{ result.used|length }}건을 인용
       </span>
     </div>
-    {{ result.answer | markdown }}
+    {{ result.answer | cite_links(result.used) | markdown }}
   </div>
 
   {% if result.used %}
     <h2>답에 인용된 글</h2>
     {% for row in result.used %}
       <div class="card">
-        <a href="{{ row.url }}" target="_blank" rel="noopener"><strong>{{ row.title }}</strong></a>
+        <a href="{{ row.url }}" target="_blank" rel="noopener">
+          <span class="muted">[{{ loop.index }}]</span> <strong>{{ row.title }}</strong></a>
         <p class="muted" style="font-size:0.85rem;">
           {{ row.collected_at.date().isoformat() }} · {{ row.source }}
           {% if not row.text %}· <em>본문 없음(제목만)</em>{% endif %}

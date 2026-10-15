@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}Tech Radar — 아카이브{% endblock %}
+{% block main_class %}wide{% endblock %}
+
+{% macro page_url(n) -%}
+/archive?page={{ n }}{% if topic %}&topic={{ topic|urlencode }}{% endif %}{% if source %}&source={{ source|urlencode }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}
+{%- endmacro %}
+
+{% block content %}
+<h1>아카이브</h1>
+
+<form action="/archive" method="get" style="display:flex; flex-wrap:wrap; gap:0.5rem; margin-bottom:1rem;">
+  <label for="q" class="muted" style="align-self:center; font-size:0.85rem;">제목 검색</label>
+  <input id="q" type="text" name="q" value="{{ q }}" placeholder="제목에 들어가는 말"
+         style="flex:1; min-width:12rem; padding:0.5rem 0.75rem; font-size:0.95rem; font-family:inherit;
+                color:var(--text); background:var(--surface); border:1px solid var(--border); border-radius:8px;">
+  {% if topic %}<input type="hidden" name="topic" value="{{ topic }}">{% endif %}
+  {% if source %}<input type="hidden" name="source" value="{{ source }}">{% endif %}
+  <button type="submit"
+          style="padding:0.5rem 1rem; font-size:0.95rem; font-family:inherit; font-weight:600;
+                 color:#fff; background:var(--accent); border:0; border-radius:8px; cursor:pointer;">
+    찾기
+  </button>
+  {% if q or topic or source %}
+    <a href="/archive" style="align-self:center; font-size:0.85rem;">조건 지우기</a>
+  {% endif %}
+</form>
+
+<details style="margin-bottom:1.25rem;">
+  <summary class="muted" style="cursor:pointer; font-size:0.85rem; padding:0.25rem 0;">
+    주제·출처로 걸러내기
+  </summary>
+  <div style="margin-top:0.6rem;">
+    <p class="muted" style="margin:0 0 0.3rem; font-size:0.78rem;">주제</p>
+    <div style="display:flex; flex-wrap:wrap; gap:0.35rem; margin-bottom:0.8rem;">
+      {% for t in topics_facet %}
+        <a href="/archive?topic={{ t.topic|urlencode }}{% if source %}&source={{ source|urlencode }}{% endif %}"
+           style="font-size:0.82rem; padding:0.2rem 0.6rem; border-radius:999px;
+                  border:1px solid {% if topic == t.topic %}var(--accent){% else %}var(--border){% endif %};
+                  color:{% if topic == t.topic %}var(--accent){% else %}var(--text-muted){% endif %};">
+          {{ t.topic }} <span class="tnum">{{ t.n }}</span>
+        </a>
+      {% endfor %}
+    </div>
+    <p class="muted" style="margin:0 0 0.3rem; font-size:0.78rem;">출처</p>
+    <div style="display:flex; flex-wrap:wrap; gap:0.35rem;">
+      {% for s in sources_facet %}
+        <a href="/archive?source={{ s.source|urlencode }}{% if topic %}&topic={{ topic|urlencode }}{% endif %}"
+           style="font-size:0.82rem; padding:0.2rem 0.6rem; border-radius:999px;
+                  border:1px solid {% if source == s.source %}var(--accent){% else %}var(--border){% endif %};
+                  color:{% if source == s.source %}var(--accent){% else %}var(--text-muted){% endif %};">
+          {{ s.source }} <span class="tnum">{{ s.n }}</span>
+        </a>
+      {% endfor %}
+    </div>
+  </div>
+</details>
+
+<p class="muted tnum" style="font-size:0.88rem; margin-bottom:0.6rem;">
+  {% if total %}
+    {{ "{:,}".format(total) }}건 중 {{ "{:,}".format(first_index) }}–{{ "{:,}".format(last_index) }}
+  {% else %}
+    조건에 맞는 글이 없습니다.
+  {% endif %}
+  {% if topic %} · 주제 <strong>{{ topic }}</strong>{% endif %}
+  {% if source %} · 출처 <strong>{{ source }}</strong>{% endif %}
+  {% if q %} · 제목에 "<strong>{{ q }}</strong>"{% endif %}
+</p>
+
+{% if rows %}
+<div class="card" style="overflow-x:auto; padding:0.5rem 0.75rem;">
+  <table style="font-size:0.9rem;">
+    <thead>
+      <tr>
+        <th class="muted" style="text-align:left; padding:0.4rem 0.5rem; font-size:0.76rem; font-weight:600;">날짜</th>
+        <th class="muted" style="text-align:left; padding:0.4rem 0.5rem; font-size:0.76rem; font-weight:600;">제목</th>
+        <th class="muted" style="text-align:left; padding:0.4rem 0.5rem; font-size:0.76rem; font-weight:600;">주제</th>
+        <th class="muted" style="text-align:left; padding:0.4rem 0.5rem; font-size:0.76rem; font-weight:600;">출처</th>
+        <th class="muted" style="text-align:right; padding:0.4rem 0.5rem; font-size:0.76rem; font-weight:600;">관련도</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+        <tr style="border-top:1px solid var(--border);">
+          <td class="muted tnum" style="padding:0.45rem 0.5rem; white-space:nowrap; vertical-align:top;">{{ r.day }}</td>
+          <td style="padding:0.45rem 0.5rem;">
+            <a href="{{ r.url }}" target="_blank" rel="noopener">{{ r.title }}</a>
+            {% if r.published %}<span class="badge" style="margin-left:0.3rem;">게재</span>{% endif %}
+          </td>
+          <td style="padding:0.45rem 0.5rem; white-space:nowrap; vertical-align:top;">
+            <a href="/archive?topic={{ r.topic|urlencode }}" class="muted">{{ r.topic }}</a>
+          </td>
+          <td class="muted" style="padding:0.45rem 0.5rem; white-space:nowrap; vertical-align:top; font-size:0.85rem;">{{ r.source }}</td>
+          <td class="muted tnum" style="padding:0.45rem 0.5rem; text-align:right; vertical-align:top;">
+            {% if r.relevance is not none %}{{ "%.2f"|format(r.relevance) }}{% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if pages > 1 %}
+<nav aria-label="페이지" style="display:flex; flex-wrap:wrap; align-items:center; gap:0.3rem; margin-top:1.25rem;">
+  {% if page > 1 %}
+    <a href="{{ page_url(page - 1) }}" style="padding:0.35rem 0.7rem; border:1px solid var(--border); border-radius:8px;">← 이전</a>
+  {% endif %}
+  {% for n in window %}
+    {% if n is none %}
+      <span class="muted" style="padding:0.35rem 0.3rem;">…</span>
+    {% elif n == page %}
+      <span class="tnum" aria-current="page"
+            style="padding:0.35rem 0.75rem; border-radius:8px; background:var(--accent); color:#fff; font-weight:600;">{{ n }}</span>
+    {% else %}
+      <a class="tnum" href="{{ page_url(n) }}"
+         style="padding:0.35rem 0.75rem; border:1px solid var(--border); border-radius:8px;">{{ n }}</a>
+    {% endif %}
+  {% endfor %}
+  {% if page < pages %}
+    <a href="{{ page_url(page + 1) }}" style="padding:0.35rem 0.7rem; border:1px solid var(--border); border-radius:8px;">다음 →</a>
+  {% endif %}
+</nav>
+{% endif %}
+{% endif %}
+
+<p class="muted" style="font-size:0.82rem; margin-top:1.5rem;">
+  다이제스트에 실리지 않은 글까지 전부입니다. 답을 원하면 <a href="/ask">묻기</a>를 쓰세요 —
+  대신 질문당 2센트, 30초쯤 걸립니다.
+</p>
+{% endblock %}

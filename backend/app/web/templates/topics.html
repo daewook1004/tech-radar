@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% block title %}Tech Radar — 주제{% endblock %}
+{% block main_class %}wide{% endblock %}
+{% block content %}
+
+<h1>주제</h1>
+<p class="muted" style="margin:-0.8rem 0 1.6rem; font-size:0.9rem;">
+  다이제스트에 실린 10건이 아니라 <strong>수집한 글 전체</strong>가 대상입니다.
+  주제는 관심사 카테고리와의 임베딩 유사도로 붙이고, 유사도가 낮은 글은 '기타'로 둡니다.
+</p>
+
+<!-- 요약 -->
+<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(190px, 1fr)); gap:0.75rem; margin-bottom:1.75rem;">
+  <div class="card" style="margin:0;">
+    <div class="muted" style="font-size:0.78rem;">최근 14일 수집</div>
+    <div class="tnum" style="font-size:1.6rem; font-weight:700; letter-spacing:-0.02em;">{{ "{:,}".format(window_collected) }}건</div>
+    <div class="muted tnum" style="font-size:0.85rem;">이 중 {{ window_published }}건이 다이제스트에</div>
+  </div>
+  <div class="card" style="margin:0;">
+    <div class="muted" style="font-size:0.78rem;">이번 주 수집</div>
+    <div class="tnum" style="font-size:1.6rem; font-weight:700; letter-spacing:-0.02em;">{{ "{:,}".format(week_collected) }}건</div>
+    <div class="muted" style="font-size:0.85rem;">월요일부터</div>
+  </div>
+  <div class="card" style="margin:0;">
+    <div class="muted" style="font-size:0.78rem;">가장 많은 주제</div>
+    <div style="font-size:1.6rem; font-weight:700; letter-spacing:-0.02em;">
+      {% if top_topic %}<a href="/archive?topic={{ top_topic|urlencode }}">{{ top_topic }}</a>{% else %}—{% endif %}
+    </div>
+    <div class="muted" style="font-size:0.85rem;">최근 {{ weeks|length }}주 누적</div>
+  </div>
+  <div class="card" style="margin:0;">
+    <div class="muted" style="font-size:0.78rem;">가장 많이 늘어난 주제</div>
+    <div style="font-size:1.6rem; font-weight:700; letter-spacing:-0.02em;">
+      {% if riser %}<a href="/archive?topic={{ riser.topic|urlencode }}">{{ riser.topic }}</a>{% else %}—{% endif %}
+    </div>
+    <div class="muted tnum" style="font-size:0.85rem;">
+      {% if riser %}+{{ riser.delta }}건 (지난 {{ trend_days }}일 대비){% else %}변화 없음{% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- 날짜별 수집량 -->
+<h2>날짜별 수집량</h2>
+<div class="card">
+  <div style="display:flex; align-items:flex-end; gap:0.35rem; height:120px;">
+    {% for d in days %}
+      <div style="flex:1; display:flex; flex-direction:column; justify-content:flex-end; height:100%;"
+           title="{{ d.day }} — {{ d.collected }}건 수집, {{ d.published }}건 게재">
+        <span class="muted tnum" style="font-size:0.7rem; text-align:center;">{{ d.collected }}</span>
+        <div style="height:{{ d.height }}%; min-height:2px; background:var(--accent);
+                    border-radius:4px 4px 0 0; margin-top:0.2rem;"></div>
+      </div>
+    {% endfor %}
+  </div>
+  <div style="display:flex; justify-content:space-between; margin-top:0.4rem;">
+    {% if days %}
+      <span class="muted tnum" style="font-size:0.75rem;">{{ days[0].day }}</span>
+      <span class="muted tnum" style="font-size:0.75rem;">{{ days[-1].day }}</span>
+    {% endif %}
+  </div>
+</div>
+
+<!-- 주제 × 주 -->
+<h2>주제별 추이</h2>
+<div class="card" style="overflow-x:auto;">
+  <table class="tnum" style="font-size:0.88rem;">
+    <thead>
+      <tr>
+        <th style="text-align:left; padding:0 0.6rem 0.5rem; font-size:0.78rem; font-weight:600;" class="muted">주제</th>
+        {% for w in weeks %}
+          <th style="padding:0 0.4rem 0.5rem; font-size:0.78rem; font-weight:600; white-space:nowrap;" class="muted">{{ w.strftime("%m/%d") }}</th>
+        {% endfor %}
+        <th style="padding:0 0.6rem 0.5rem; font-size:0.78rem; font-weight:600;" class="muted">합계</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in heatmap %}
+        <tr>
+          <td style="padding:0.3rem 0.6rem; white-space:nowrap;">
+            <a href="/archive?topic={{ row.topic|urlencode }}">{{ row.topic }}</a>
+          </td>
+          {% for c in row.cells %}
+            <td style="padding:0.25rem 0.2rem; text-align:center;">
+              <div style="padding:0.3rem 0.2rem; border-radius:5px; min-width:3rem;
+                          background:color-mix(in srgb, var(--accent) {{ (c.intensity * 100)|round|int }}%, var(--surface));
+                          color:{% if c.intensity > 0.55 %}#fff{% else %}var(--text){% endif %};">
+                {% if c.n %}{{ c.n }}{% else %}<span class="muted">·</span>{% endif %}
+              </div>
+            </td>
+          {% endfor %}
+          <td style="padding:0.3rem 0.6rem; text-align:right; font-weight:600;">{{ row.total }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted" style="font-size:0.8rem; margin-top:0.8rem;">
+    칸이 진할수록 그 주에 많이 들어온 주제입니다. 가로는 주의 시작일(월요일).
+  </p>
+</div>
+
+<!-- 급상승·급감 -->
+<h2>최근 {{ trend_days }}일 변화</h2>
+<div class="card">
+  {% if moves %}
+    <div style="display:flex; flex-direction:column; gap:0.5rem;">
+      {% for m in moves %}
+        <div style="display:flex; align-items:center; gap:0.6rem;">
+          <div style="width:9.5rem; flex:none; text-align:right;">
+            <a href="/archive?topic={{ m.topic|urlencode }}">{{ m.topic }}</a>
+          </div>
+          <div style="flex:1; display:flex; align-items:center;">
+            <div style="flex:1; display:flex; justify-content:flex-end;">
+              {% if m.delta < 0 %}
+                <div style="width:{{ m.width }}%; height:14px; background:var(--cool); border-radius:4px 0 0 4px;"></div>
+              {% endif %}
+            </div>
+            <div style="width:1px; height:20px; background:var(--border); flex:none;"></div>
+            <div style="flex:1;">
+              {% if m.delta > 0 %}
+                <div style="width:{{ m.width }}%; height:14px; background:var(--accent); border-radius:0 4px 4px 0;"></div>
+              {% endif %}
+            </div>
+          </div>
+          <div class="tnum" style="width:7.5rem; flex:none; font-size:0.85rem;">
+            <strong style="color:{% if m.delta > 0 %}var(--accent){% elif m.delta < 0 %}var(--cool){% else %}var(--text-muted){% endif %};">
+              {% if m.delta > 0 %}+{% endif %}{{ m.delta }}건
+            </strong>
+            <span class="muted">{{ m.previous }}→{{ m.recent }}</span>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+    <p class="muted" style="font-size:0.8rem; margin-top:0.9rem;">
+      지난 {{ trend_days }}일과 그 앞 {{ trend_days }}일의 수집 건수 차이입니다.
+      오른쪽(진한 주황)이 증가, 왼쪽(파랑)이 감소.
+    </p>
+  {% else %}
+    <p class="muted">비교할 기간이 아직 모이지 않았습니다.</p>
+  {% endif %}
+</div>
+
+<!-- 사각지대 -->
+<h2>사각지대</h2>
+<div class="card" style="overflow-x:auto;">
+  <table style="font-size:0.9rem;">
+    <thead>
+      <tr>
+        <th style="text-align:left; padding:0 0.6rem 0.5rem; font-size:0.78rem; font-weight:600;" class="muted">주제</th>
+        <th style="text-align:right; padding:0 0.6rem 0.5rem; font-size:0.78rem; font-weight:600;" class="muted">수집</th>
+        <th style="text-align:right; padding:0 0.6rem 0.5rem; font-size:0.78rem; font-weight:600;" class="muted">필터 통과</th>
+        <th style="text-align:right; padding:0 0.6rem 0.5rem; font-size:0.78rem; font-weight:600;" class="muted">다이제스트 게재</th>
+        <th style="text-align:left; padding:0 0.6rem 0.5rem; font-size:0.78rem; font-weight:600;" class="muted"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for b in blind %}
+        <tr style="border-top:1px solid var(--border); {% if b.published == 0 and b.collected >= 10 %}background:var(--warn-soft);{% endif %}">
+          <td style="padding:0.45rem 0.6rem;"><a href="/archive?topic={{ b.topic|urlencode }}">{{ b.topic }}</a></td>
+          <td class="tnum" style="padding:0.45rem 0.6rem; text-align:right;">{{ b.collected }}</td>
+          <td class="tnum" style="padding:0.45rem 0.6rem; text-align:right;">{{ b.passed }}</td>
+          <td class="tnum" style="padding:0.45rem 0.6rem; text-align:right; {% if b.published == 0 and b.collected >= 10 %}color:var(--warn); font-weight:700;{% endif %}">{{ b.published }}</td>
+          <td style="padding:0.45rem 0.6rem;">
+            {% if b.published == 0 and b.collected >= 10 %}
+              <span class="badge" style="background:var(--warn-soft); color:var(--warn);">한 번도 안 실림</span>
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted" style="font-size:0.8rem; margin-top:0.8rem;">
+    최근 14일. 꾸준히 들어오는데 한 번도 안 실린 주제는 관심사 설정이나 랭킹이 놓치는 자리입니다.
+  </p>
+</div>
+
+{% endblock %}

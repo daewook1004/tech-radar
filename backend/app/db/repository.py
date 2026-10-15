@@ -192,3 +192,152 @@ def get_corpus_for_ask(session: Session, body_chars: int) -> list:
         func.left(func.coalesce(ContentRow.text, ""), body_chars).label("text"),
     ).order_by(ContentRow.collected_at)
     return list(session.execute(stmt).all())
+
+
+# --- 주제 대시보드 -----------------------------------------------------------
+# 라벨은 topic_label.py가 제목만 보고 매긴 것(scores['topic'])이다. 처음에는 embed_filter가
+# 이미 계산해 둔 카테고리 argmax를 공짜로 쓰려 했지만, LLM이 주제를 매긴 809건과 비교해
+# 일치율이 35%여서 버렸다(근거는 topic_label.py 머리말과 docs/eval/topic-labels/).
+# 라벨이 아직 없는 글(백필 전, 또는 그날 라벨 단계가 실패한 글)은 '기타'로 묶인다.
+OTHER_LABEL = "기타"
+
+
+def _kst_day():
+    """수집일은 KST 달력 날짜로 — run_date와 같은 기준이어야 주/일 집계가 어긋나지 않는다."""
+    return func.date(func.timezone("Asia/Seoul", ContentRow.collected_at))
+
+
+def _label():
+    """라벨이 있는 글은 그 주제로, 없는 글은 '기타'."""
+    name = func.nullif(func.coalesce(ContentRow.scores["topic"].as_string(), ""), "")
+    return func.coalesce(name, OTHER_LABEL)
+
+
+def topic_weeks(session: Session, weeks: int = 8) -> list:
+    """주제 × 주 히트맵용 — (주 시작일, 주제, 건수).
+
+    SELECT와 GROUP BY에 같은 표현식 객체를 넘겨야 한다 — _label()을 두 번 부르면
+    바인드 파라미터 이름이 달라져서 PostgreSQL이 같은 식으로 보지 않는다(GroupingError)."""
+    day = _kst_day()
+    label = _label()
+    week = func.date(func.date_trunc("week", day))
+    since = func.date(func.date_trunc("week", func.timezone("Asia/Seoul", func.now()))) - (weeks - 1) * 7
+    stmt = (
+        select(week.label("week"), label.label("topic"), func.count().label("n"))
+        .where(day >= since)
+        .group_by(week, label)
+        .order_by(week, func.count().desc())
+    )
+    return list(session.execute(stmt).all())
+
+
+def topic_trend(session: Session, days: int = 7) -> list:
+    """급상승·급감용 — 최근 days일과 그 앞 days일의 주제별 건수를 나란히."""
+    day = _kst_day()
+    label = _label()
+    today = func.date(func.timezone("Asia/Seoul", func.now()))
+    recent = func.count().filter(day > today - days)
+    previous = func.count().filter(day <= today - days)
+    stmt = (
+        select(label.label("topic"), recent.label("recent"), previous.label("previous"))
+        .where(day > today - 2 * days)
+        .group_by(label)
+    )
+    return list(session.execute(stmt).all())
+
+
+def topic_blindspots(session: Session, days: int = 14) -> list:
+    """사각지대용 — 주제별로 '수집된 건수'와 '다이제스트에 실린 건수'를 비교한다.
+    많이 들어오는데 한 번도 안 실린 주제가 관심사 설정이나 랭킹이 놓치는 자리다."""
+    published = select(DigestItem.content_id).scalar_subquery()
+    label = _label()
+    stmt = (
+        select(
+            label.label("topic"),
+            func.count().label("collected"),
+            func.count().filter(ContentRow.id.in_(published)).label("published"),
+            func.count().filter(ContentRow.status != "filtered_out").label("passed"),
+        )
+        .where(_kst_day() > func.date(func.timezone("Asia/Seoul", func.now())) - days)
+        .group_by(label)
+        .order_by(func.count().desc())
+    )
+    return list(session.execute(stmt).all())
+
+
+def collection_days(session: Session, days: int = 14) -> list:
+    """날짜별 수집량 — (날짜, 건수, 다이제스트 게재 건수)."""
+    published = select(DigestItem.content_id).scalar_subquery()
+    day = _kst_day()
+    stmt = (
+        select(
+            day.label("day"),
+            func.count().label("collected"),
+            func.count().filter(ContentRow.id.in_(published)).label("published"),
+        )
+        .where(day > func.date(func.timezone("Asia/Seoul", func.now())) - days)
+        .group_by(day)
+        .order_by(day)
+    )
+    return list(session.execute(stmt).all())
+
+
+def archive_page(
+    session: Session,
+    topic: str | None = None,
+    source: str | None = None,
+    q: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> tuple[list, int]:
+    """아카이브 목록 한 페이지와 전체 건수.
+
+    ORM 객체가 아니라 필요한 컬럼만 가져온다 — 6,500건을 통째로 올리면 대시보드
+    프로세스가 야간 파이프라인과 같은 1GB 호스트에서 자리를 잃는다(get_corpus_for_ask와 같은 이유)."""
+    published = select(DigestItem.content_id).scalar_subquery()
+    filters = []
+    if topic == OTHER_LABEL:
+        filters.append(func.coalesce(ContentRow.scores["topic"].as_string(), "").in_(("", OTHER_LABEL)))
+    elif topic:
+        filters.append(ContentRow.scores["topic"].as_string() == topic)
+    if source:
+        filters.append(ContentRow.source == source)
+    if q:
+        filters.append(ContentRow.title.ilike(f"%{q}%"))
+
+    total = session.execute(select(func.count()).select_from(ContentRow).where(*filters)).scalar_one()
+    stmt = (
+        select(
+            ContentRow.id,
+            ContentRow.source,
+            ContentRow.title,
+            ContentRow.url,
+            _kst_day().label("day"),
+            _label().label("topic"),
+            ContentRow.scores["relevance"].as_float().label("relevance"),
+            ContentRow.id.in_(published).label("published"),
+        )
+        .where(*filters)
+        .order_by(ContentRow.collected_at.desc(), ContentRow.source)
+        .limit(limit)
+        .offset(offset)
+    )
+    return list(session.execute(stmt).all()), total
+
+
+def archive_facets(session: Session) -> tuple[list, list]:
+    """필터 칩에 쓸 주제·출처 목록과 각 건수."""
+    label = _label()
+    topics = list(
+        session.execute(
+            select(label.label("topic"), func.count().label("n")).group_by(label).order_by(func.count().desc())
+        ).all()
+    )
+    sources = list(
+        session.execute(
+            select(ContentRow.source, func.count().label("n"))
+            .group_by(ContentRow.source)
+            .order_by(func.count().desc())
+        ).all()
+    )
+    return topics, sources

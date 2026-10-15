@@ -40,6 +40,7 @@ from app.pipeline.llm_analyze import analyze_items
 from app.pipeline.llm_score import score_items
 from app.pipeline.normalize import normalize
 from app.pipeline.rank import rank_and_cutoff, rrf_scores
+from app.pipeline.topic_label import label_items
 from app.pipeline.trend_summary import summarize_trends
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -102,7 +103,9 @@ def alert_reason(failures: list[dict], collector_count: int) -> str | None:
     그때마다 알리면 "괜찮습니다" 메일이 쌓여 정작 중요한 알림까지 안 읽게 된다(최근 14회 중
     2회가 이런 실패였다). 수집 외 단계의 실패나 수집기 전멸은 다이제스트 내용이 실제로
     망가지는 경우라 알린다. 소스 하나가 며칠째 죽어 있는 건 check_digest.py가 따로 본다."""
-    others = [f for f in failures if f.get("stage") != "collect"]
+    # topic_label은 다이제스트가 아니라 /topics 대시보드만 쓰는 단계라 실패해도 메일을 보내지
+    # 않는다 — 그날 글이 '기타'로 묶이는 것뿐이고, 알림이 쌓이면 정작 중요한 걸 안 읽게 된다.
+    others = [f for f in failures if f.get("stage") not in ("collect", "topic_label")]
     collect = [f for f in failures if f.get("stage") == "collect"]
     if others:
         return "\n".join(f"[{f.get('stage')}] {f.get('error', '')[:300]}" for f in others)
@@ -190,6 +193,17 @@ def _run_stages(session: Session, run: PipelineRun, run_date: date) -> None:
         failures.append({"stage": "llm", "source": None, "error": str(e)})
         status = "partial_failure"
 
+    # 주제 라벨은 /topics 대시보드만 쓰는 값이고 다이제스트와는 상관이 없다. 그래서 발송이
+    # 끝난 뒤에 돌린다 — 2026-09-12·13에 본문 보강 한 단계가 이틀치 발송을 날려먹은 뒤로
+    # 세운 원칙이다(fetch_body의 NUL 바이트). 여기서 깨지면 그날 글이 '기타'로 묶일 뿐이다.
+    topics_labelled = 0
+    try:
+        topics_labelled, _ = label_items(session, content_rows, run_date)
+    except Exception as e:
+        session.rollback()
+        logger.exception("topic labelling failed; the dashboard will show these as '기타'")
+        failures.append({"stage": "topic_label", "source": None, "error": str(e)})
+
     # 파이프라인 컨테이너는 --rm으로 끝나자마자 지워져서 메모리를 얼마나 썼는지 나중엔 알 수 없다.
     # 2026-09-10 서버 정지 이후 상한(mem_limit 750m) 대비 여유를 매일 보려고 남긴다.
     # ru_maxrss는 리눅스에서 KB 단위이고 프로세스 수명 전체의 최댓값이라 임베딩 단계 피크가 잡힌다.
@@ -208,6 +222,7 @@ def _run_stages(session: Session, run: PipelineRun, run_date: date) -> None:
             "passed_filter": len(passed_rows),
             "bodies_filled": bodies_filled,
             "bodies_missing": bodies_missing,
+            "topics_labelled": topics_labelled,
             "failure_count": len(failures),
             "peak_rss_mb": peak_rss_mb,
         },

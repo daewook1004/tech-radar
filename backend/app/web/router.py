@@ -154,8 +154,8 @@ def _page_window(page: int, pages: int) -> list:
 def topics(request: Request, session: Session = Depends(get_db)):
     """내용 쪽 대시보드 — 어떤 주제가 얼마나 나왔나.
 
-    라벨은 embed_filter가 남긴 관심사 카테고리 argmax라서 LLM 호출이 들어가지 않는다
-    (repository.LABEL_MIN_COS 아래는 '기타'). 다이제스트에 실린 10건이 아니라
+    라벨은 topic_label.py가 제목만 보고 매긴 것(scores['topic'])이다 — 라벨이 없는 글과
+    어느 분류에도 안 맞는 글은 '기타'로 묶인다. 다이제스트에 실린 10건이 아니라
     수집분 전체가 대상이다 — '내가 받은 것'이 아니라 '들어온 것'을 보는 화면이다."""
     rows = repository.topic_weeks(session, weeks=_HEATMAP_WEEKS)
     weeks = sorted({r.week for r in rows})
